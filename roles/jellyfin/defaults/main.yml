@@ -18,7 +18,7 @@ jellyfin_enable_nonfree: true
 
 jellyfin_service_enabled: true
 
-# Transcode scratch, a separate ZFS dataset (mp1). Jellyfin writes a marker
+# Transcode scratch, ideally a separate dataset or mount. Jellyfin writes a marker
 # file here before every HLS session, so if the mount is not owned by the
 # jellyfin user, playback fails before ffmpeg is invoked.
 jellyfin_transcode_path: /transcode

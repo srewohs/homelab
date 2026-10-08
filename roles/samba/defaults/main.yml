@@ -15,5 +15,5 @@ samba_users: []
 # any firewall rule: two independent things then have to be wrong before the
 # share is reachable from somewhere it shouldn't be.
 #   - 127.0.0.1
-#   - 192.168.20.0/24
+#   - 192.0.2.0/24
 samba_hosts_allow: []

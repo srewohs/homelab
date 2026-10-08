@@ -46,5 +46,5 @@ One per user, referenced from `samba_users`, for example
             password: "{{ vault_samba_password_alice }}"
         samba_hosts_allow:
           - 127.0.0.1
-          - 192.168.20.0/24
+          - 192.0.2.0/24
 ```

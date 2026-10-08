@@ -34,5 +34,5 @@ The role asserts the URL and token are set before installing Telegraf.
   roles:
     - role: baseline
       vars:
-        baseline_timezone: America/New_York
+        baseline_timezone: Europe/Berlin
 ```

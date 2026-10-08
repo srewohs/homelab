@@ -129,7 +129,7 @@
     group: jellyfin
     mode: "0750"
 
-# /transcode is mp1, a bind-mounted ZFS dataset owned by host root, which maps
+# The transcode path is often a bind-mounted dataset owned by host root, which maps
 # to `nobody` inside an unprivileged container. Jellyfin writes a marker file
 # here before starting any HLS session, so without this every playback attempt
 # dies with UnauthorizedAccessException before ffmpeg is ever invoked.
