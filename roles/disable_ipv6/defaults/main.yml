@@ -1,0 +1,5 @@
+---
+# These containers pick up a global IPv6 address from RA but have no working
+# IPv6 route. Node/npm (Happy Eyeballs) and Docker pulls try v6 first and
+# stall on timeouts before falling back, so turn it off entirely.
+disable_ipv6_sysctl_file: /etc/sysctl.d/90-disable-ipv6.conf

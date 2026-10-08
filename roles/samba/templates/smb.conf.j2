@@ -1,0 +1,24 @@
+[global]
+   server min protocol = SMB3_11
+   smb encrypt = required
+   disable netbios = yes
+   restrict anonymous = 2
+   map to guest = never
+   bind interfaces only = yes
+   interfaces = 127.0.0.1 {{ ansible_host }}
+   hosts allow = {{ samba_hosts_allow | join(' ') }}
+   server string =
+   load printers = no
+   printcap name = /dev/null
+   disable spoolss = yes
+
+[{{ samba_share_name }}]
+   path = {{ samba_share_path }}
+   valid users = @{{ samba_share_group }}
+   force group = {{ samba_share_group }}
+   create mask = 0660
+   directory mask = 0770
+   force create mode = 0660
+   force directory mode = 0770
+   browseable = yes
+   read only = no

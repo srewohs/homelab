@@ -1,0 +1,15 @@
+---
+# net.ipv6.* is per network namespace, so an unprivileged container can set
+# these for itself without touching the Proxmox host.
+- name: Disable IPv6 (persisted)
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    sysctl_file: "{{ disable_ipv6_sysctl_file }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - net.ipv6.conf.all.disable_ipv6
+    - net.ipv6.conf.default.disable_ipv6
+    - net.ipv6.conf.eth0.disable_ipv6

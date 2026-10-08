@@ -1,0 +1,7 @@
+traefik_version: "3.7.12"          # check the releases page and pin a real one
+traefik_acme_staging: false
+
+# Required, no defaults (the role asserts they are set):
+#   traefik_acme_email     Let's Encrypt account email
+#   traefik_base_domains   list of domains; each gets a wildcard certificate
+#   traefik_services       list of {name, url}; routed as <name>.<domain>

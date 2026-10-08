@@ -1,0 +1,20 @@
+---
+- name: Prepare the AI stack containers
+  hosts: ai_stack
+  become: false        # already root in LXC
+  roles:
+    - baseline
+    - disable_ipv6
+
+- name: Build the AI gateway
+  hosts: ai_gateway
+  become: false
+  roles:
+    - docker
+    - ai_stack
+
+- name: Build the Pi sandbox
+  hosts: pi_sandbox
+  become: false
+  roles:
+    - pi_sandbox

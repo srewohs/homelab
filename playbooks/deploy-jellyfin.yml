@@ -1,0 +1,8 @@
+---
+- name: Build the Jellyfin container
+  hosts: media
+  become: false        # already root in LXC
+  roles:
+    - baseline
+    - tailscale
+    - jellyfin

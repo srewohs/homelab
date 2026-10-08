@@ -1,0 +1,96 @@
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - traefik_acme_email is defined and traefik_acme_email | length > 0
+      - traefik_base_domains is defined and traefik_base_domains | length > 0
+      - traefik_services is defined
+    fail_msg: >-
+      Set traefik_acme_email, traefik_base_domains, and traefik_services in
+      inventory vars. See roles/traefik/README.md.
+    quiet: true
+
+- name: Create traefik system user
+  ansible.builtin.user:
+    name: traefik
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: traefik
+    group: traefik
+    mode: "0750"
+  loop:
+    - /etc/traefik
+    - /etc/traefik/dynamic
+    - /var/lib/traefik
+    - "/opt/traefik/{{ traefik_version }}"
+
+- name: Download and unpack Traefik
+  ansible.builtin.unarchive:
+    src: "https://github.com/traefik/traefik/releases/download/v{{ traefik_version }}/traefik_v{{ traefik_version }}_linux_amd64.tar.gz"
+    dest: "/opt/traefik/{{ traefik_version }}"
+    remote_src: true
+    creates: "/opt/traefik/{{ traefik_version }}/traefik"
+
+- name: Link current version into PATH
+  ansible.builtin.file:
+    src: "/opt/traefik/{{ traefik_version }}/traefik"
+    dest: /usr/local/bin/traefik
+    state: link
+  notify: Restart traefik
+
+- name: Create acme.json with correct permissions
+  ansible.builtin.file:
+    path: /var/lib/traefik/acme.json
+    state: touch
+    owner: traefik
+    group: traefik
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Static config
+  ansible.builtin.template:
+    src: traefik.yml.j2
+    dest: /etc/traefik/traefik.yml
+    owner: traefik
+    group: traefik
+    mode: "0640"
+  notify: Restart traefik
+
+- name: Dynamic config
+  ansible.builtin.template:
+    src: dynamic.yml.j2
+    dest: /etc/traefik/dynamic/services.yml
+    owner: traefik
+    group: traefik
+    mode: "0640"
+
+- name: Environment file with Cloudflare token
+  ansible.builtin.template:
+    src: traefik.env.j2
+    dest: /etc/traefik/traefik.env
+    owner: traefik
+    group: traefik
+    mode: "0600"
+  no_log: true
+  notify: Restart traefik
+
+- name: Systemd unit
+  ansible.builtin.template:
+    src: traefik.service.j2
+    dest: /etc/systemd/system/traefik.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart traefik
+
+- name: Enable and start Traefik
+  ansible.builtin.systemd:
+    name: traefik
+    enabled: true
+    state: started

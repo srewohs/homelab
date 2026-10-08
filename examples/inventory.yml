@@ -1,0 +1,27 @@
+# Example inventory. Copy this file and group_vars/ into your own private
+# repo, next to each other, and replace every address and name.
+# Ansible loads group_vars/ from the directory the inventory lives in.
+all:
+  children:
+    proxy:
+      hosts:
+        traefik:
+          ansible_host: 192.0.2.10
+    fileshare:
+      hosts:
+        samba:
+          ansible_host: 192.0.2.11
+    media:
+      hosts:
+        jellyfin:
+          ansible_host: 192.0.2.12
+    ai_stack:
+      children:
+        ai_gateway:
+          hosts:
+            ai-gateway:
+              ansible_host: 192.0.2.13
+        pi_sandbox:
+          hosts:
+            pi-sandbox:
+              ansible_host: 192.0.2.14

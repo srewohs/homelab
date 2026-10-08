@@ -1,0 +1,9 @@
+---
+- name: Restart telegraf
+  ansible.builtin.systemd:
+    name: telegraf
+    state: restarted
+
+- name: Generate locales
+  ansible.builtin.command: locale-gen
+  changed_when: true

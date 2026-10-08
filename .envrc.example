@@ -1,0 +1,18 @@
+# Copy to .envrc (gitignored), adjust the paths, then run: direnv allow
+# ansible.cfg does not merge with other config files, so personal settings
+# live here instead.
+
+# Private inventory repo, cloned next to this one.
+export HOMELAB_PRIVATE="$PWD/../homelab-private"
+export ANSIBLE_INVENTORY="$HOMELAB_PRIVATE/inventory.yml"
+
+# Vault password file, mode 0600, outside both repos.
+export ANSIBLE_VAULT_PASSWORD_FILE="$HOME/.ansible-vault-pass"
+
+# Lab shortcut: skip SSH host key checks. Populating known_hosts for your
+# hosts is the real fix; remove this line once you have.
+export ANSIBLE_HOST_KEY_CHECKING=False
+
+# Optional: record commit dates in UTC so commits don't reveal your local
+# timezone. Affects every program run from this directory, not just git.
+# export TZ=UTC

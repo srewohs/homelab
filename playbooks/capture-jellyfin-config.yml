@@ -1,0 +1,45 @@
+---
+# Read-only mirror of Jellyfin's own config into the repo.
+#
+# Ansible NEVER pushes these files. Jellyfin owns them and rewrites them from
+# the dashboard. This exists so that "when did I turn on VPP tone mapping, and
+# what was it before" is answerable with `git log -p`.
+#
+# Run it before deploy-jellyfin.yml, and after any settings session.
+#
+# These XML files contain no API keys or passwords (those live in
+# jellyfin.db), so they are safe to commit unencrypted. Spot-check on first
+# run anyway.
+
+- name: Capture Jellyfin configuration
+  hosts: media
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Find config files
+      ansible.builtin.find:
+        paths: /etc/jellyfin
+        patterns:
+          - "*.xml"
+          - "*.json"
+      register: jf_config_files
+
+    - name: Pull them into the repo
+      ansible.builtin.fetch:
+        src: "{{ item.path }}"
+        dest: "{{ inventory_dir }}/captured/"
+        flat: false
+      loop: "{{ jf_config_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Capture the installed plugin list
+      ansible.builtin.shell: ls -1 /var/lib/jellyfin/plugins/
+      register: jf_plugins
+      changed_when: false
+
+    - name: Write the plugin list into the repo
+      ansible.builtin.copy:
+        content: "{{ jf_plugins.stdout }}\n"
+        dest: "{{ inventory_dir }}/captured/{{ inventory_hostname }}/plugins.txt"
+      delegate_to: localhost

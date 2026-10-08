@@ -1,0 +1,190 @@
+---
+# ---------------------------------------------------------------------------
+# SCOPE
+#
+# Pi runs arbitrary shell commands, so this container is the blast radius.
+# The `agent` user gets no sudo, and the only secrets on this host are Pi's
+# own (pi.env). Gateway keys stay on the gateway and never come here.
+# ---------------------------------------------------------------------------
+
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - pi_sandbox_litellm_base_url is defined and pi_sandbox_litellm_base_url | length > 0
+      - pi_sandbox_git_name is defined and pi_sandbox_git_name | length > 0
+    fail_msg: >-
+      Set pi_sandbox_litellm_base_url and pi_sandbox_git_name in inventory
+      vars. See roles/pi_sandbox/README.md.
+    quiet: true
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ pi_sandbox_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# --- Node.js --------------------------------------------------------------
+
+- name: Fetch NodeSource signing key
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/nodesource.asc
+    mode: "0644"
+
+- name: Add NodeSource repository
+  ansible.builtin.deb822_repository:
+    name: nodesource
+    types: [deb]
+    uris: "https://deb.nodesource.com/node_{{ pi_sandbox_node_major }}.x"
+    suites: [nodistro]
+    components: [main]
+    architectures: [amd64]
+    signed_by: /etc/apt/keyrings/nodesource.asc
+    state: present
+
+# Debian ships its own, older nodejs. Without this pin a later apt upgrade
+# could resolve to whichever origin apt prefers on the day.
+- name: Prefer NodeSource for nodejs
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/nodesource
+    content: |
+      Package: nodejs
+      Pin: origin deb.nodesource.com
+      Pin-Priority: 1001
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install Node.js
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+    update_cache: true
+
+# --- agent user -----------------------------------------------------------
+
+- name: Create the agent user (no sudo)
+  ansible.builtin.user:
+    name: "{{ pi_sandbox_user }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Authorize the admin key for the agent user
+  ansible.posix.authorized_key:
+    user: "{{ pi_sandbox_user }}"
+    key: "{{ pi_sandbox_authorized_key }}"
+    state: present
+
+- name: Create agent directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ pi_sandbox_user }}"
+    group: "{{ pi_sandbox_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ pi_sandbox_npm_prefix }}", mode: "0755" }
+    - { path: "{{ pi_sandbox_home }}/.config", mode: "0700" }
+    - { path: "{{ pi_sandbox_home }}/.pi", mode: "0700" }
+    - { path: "{{ pi_sandbox_home }}/.pi/agent", mode: "0700" }
+    - { path: "{{ pi_sandbox_workspace }}", mode: "0755" }
+
+- name: Point npm's global prefix at the agent's home
+  ansible.builtin.copy:
+    dest: "{{ pi_sandbox_home }}/.npmrc"
+    content: "prefix={{ pi_sandbox_npm_prefix }}\n"
+    owner: "{{ pi_sandbox_user }}"
+    group: "{{ pi_sandbox_user }}"
+    mode: "0644"
+
+- name: Template pi.env
+  ansible.builtin.template:
+    src: pi.env.j2
+    dest: "{{ pi_sandbox_home }}/.config/pi.env"
+    owner: "{{ pi_sandbox_user }}"
+    group: "{{ pi_sandbox_user }}"
+    mode: "0600"
+  no_log: true
+
+# ssh logins and tmux both start login shells, which read ~/.profile.
+- name: Put the npm prefix on PATH and load pi.env
+  ansible.builtin.blockinfile:
+    path: "{{ pi_sandbox_home }}/.profile"
+    create: true
+    owner: "{{ pi_sandbox_user }}"
+    group: "{{ pi_sandbox_user }}"
+    mode: "0644"
+    marker: "# {mark} ANSIBLE MANAGED: pi_sandbox"
+    block: |
+      export PATH="{{ pi_sandbox_npm_prefix }}/bin:$PATH"
+      [ -f "$HOME/.config/pi.env" ] && . "$HOME/.config/pi.env"
+
+# No secret in here: apiKey is interpolated from LITELLM_API_KEY (pi.env) at
+# request time. Owned by Ansible; add models in pi_sandbox_litellm_models.
+- name: Register the LiteLLM gateway as a Pi provider
+  ansible.builtin.template:
+    src: models.json.j2
+    dest: "{{ pi_sandbox_home }}/.pi/agent/models.json"
+    owner: "{{ pi_sandbox_user }}"
+    group: "{{ pi_sandbox_user }}"
+    mode: "0644"
+
+# Meant to be edited by hand after the first run, so never overwrite it.
+- name: Starter AGENTS.md
+  ansible.builtin.copy:
+    src: AGENTS.md
+    dest: "{{ pi_sandbox_home }}/.pi/agent/AGENTS.md"
+    owner: "{{ pi_sandbox_user }}"
+    group: "{{ pi_sandbox_user }}"
+    mode: "0644"
+    force: false
+
+# --- everything below runs as the agent user ------------------------------
+# su rather than sudo: root needs no password for it, and sudo is not
+# installed (on purpose, so agent cannot use it either).
+
+- name: Install Pi
+  community.general.npm:
+    name: "{{ pi_sandbox_pi_package }}"
+    version: "{{ pi_sandbox_pi_version }}"
+    global: true
+    ignore_scripts: true
+    state: present
+  become: true
+  become_method: ansible.builtin.su
+  become_user: "{{ pi_sandbox_user }}"
+  environment:
+    HOME: "{{ pi_sandbox_home }}"
+    NPM_CONFIG_PREFIX: "{{ pi_sandbox_npm_prefix }}"
+
+- name: Set git identity
+  community.general.git_config:
+    scope: global
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+  loop:
+    - { name: user.name, value: "{{ pi_sandbox_git_name }}" }
+    - { name: user.email, value: "{{ pi_sandbox_git_email }}" }
+  become: true
+  become_method: ansible.builtin.su
+  become_user: "{{ pi_sandbox_user }}"
+  environment:
+    HOME: "{{ pi_sandbox_home }}"
+  no_log: true
+
+# The helper reads GITHUB_TOKEN from the environment at call time, so the
+# token itself never lands in .gitconfig. Scoped to github.com only.
+- name: GitHub HTTPS credentials from GITHUB_TOKEN
+  community.general.git_config:
+    scope: global
+    name: credential.https://github.com.helper
+    value: >-
+      !f() { test "$1" = get || exit 0; test -n "$GITHUB_TOKEN" || exit 0;
+      echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f
+    state: "{{ 'present' if pi_sandbox_github_token | length > 0 else 'absent' }}"
+  become: true
+  become_method: ansible.builtin.su
+  become_user: "{{ pi_sandbox_user }}"
+  environment:
+    HOME: "{{ pi_sandbox_home }}"

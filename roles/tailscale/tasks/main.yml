@@ -1,0 +1,75 @@
+---
+- name: Assert /dev/net/tun is present
+  ansible.builtin.stat:
+    path: /dev/net/tun
+  register: tailscale_tun
+
+- name: Fail early if TUN was not passed into the container
+  ansible.builtin.fail:
+    msg: >-
+      /dev/net/tun is missing. Add these two lines to the container's
+      .conf on the Proxmox host and restart it:
+      "lxc.cgroup2.devices.allow: c 10:200 rwm" and
+      "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
+  when: not tailscale_tun.stat.exists
+
+- name: Fetch Tailscale signing key
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_facts['distribution_release'] }}.noarmor.gpg"
+    dest: /etc/apt/keyrings/tailscale.gpg
+    mode: "0644"
+
+- name: Add Tailscale repository
+  ansible.builtin.deb822_repository:
+    name: tailscale
+    types: [deb]
+    uris: "https://pkgs.tailscale.com/stable/debian"
+    suites: ["{{ ansible_facts['distribution_release'] }}"]
+    components: [main]
+    architectures: [amd64]
+    signed_by: /etc/apt/keyrings/tailscale.gpg
+    state: present
+
+- name: Install tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+    update_cache: true
+
+- name: Enable tailscaled
+  ansible.builtin.systemd:
+    name: tailscaled
+    enabled: true
+    state: started
+
+# `tailscale up` is not idempotent and will re-authenticate on every run, so
+# guard it on the node's current state. A restored tailscaled.state file makes
+# BackendState 'Running' immediately, which is why this guard also covers the
+# identity-migration case even before tailscale_authenticate is consulted.
+- name: Check whether this node is already logged in
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status
+  changed_when: false
+  check_mode: false   # read-only; later tasks need its output in check mode too
+  failed_when: false
+
+- name: Bring a NEW node up
+  ansible.builtin.command: >-
+    tailscale up --authkey={{ tailscale_authkey }} {{ tailscale_up_args }}
+  when:
+    - tailscale_authenticate | bool
+    - tailscale_status.rc != 0
+      or (tailscale_status.stdout | from_json).BackendState != 'Running'
+  changed_when: true
+  no_log: true
+
+- name: Report identity when authentication is being skipped
+  ansible.builtin.debug:
+    msg: >-
+      tailscale_authenticate is false. This node will stay unauthenticated
+      until you restore /var/lib/tailscale/tailscaled.state from the old
+      container. See docs/jellyfin-tailscale-and-traefik.md.
+  when:
+    - not (tailscale_authenticate | bool)
+    - tailscale_status.rc != 0
+      or (tailscale_status.stdout | from_json).BackendState != 'Running'

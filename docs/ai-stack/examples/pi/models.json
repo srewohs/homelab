@@ -1,0 +1,13 @@
+{
+  "providers": {
+    "litellm": {
+      "baseUrl": "http://<gateway-ip>:4000/v1",
+      "api": "openai-completions",
+      "apiKey": "$LITELLM_API_KEY",
+      "models": [
+        { "id": "chat" },
+        { "id": "deepseek-flash" }
+      ]
+    }
+  }
+}

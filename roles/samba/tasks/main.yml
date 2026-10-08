@@ -1,0 +1,84 @@
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - samba_users | length > 0
+      - samba_hosts_allow | length > 0
+    fail_msg: >-
+      Set samba_users and samba_hosts_allow in inventory vars. See
+      roles/samba/README.md.
+    quiet: true
+
+- name: Install samba
+  ansible.builtin.apt:
+    name: samba
+    state: present
+    update_cache: true
+
+- name: Create share group
+  ansible.builtin.group:
+    name: "{{ samba_share_group }}"
+    gid: "{{ samba_share_gid }}"
+    state: present
+
+- name: Create samba users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    uid: "{{ item.uid }}"
+    group: "{{ samba_share_group }}"
+    shell: /usr/sbin/nologin
+    create_home: false
+    system: true
+  loop: "{{ samba_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# smbpasswd has no idempotent "create if absent" mode and command/shell
+# always reports changed, so enumerate first. A password rotated in the
+# vault will NOT propagate on a re-run, since there is no way to test an
+# existing hash against a new plaintext; rotation stays a manual
+# `smbpasswd` on the target.
+- name: Enumerate existing samba accounts
+  ansible.builtin.command: pdbedit -L
+  register: samba_accounts
+  changed_when: false
+
+- name: Create samba accounts
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      printf '%s\n%s\n' "{{ item.password }}" "{{ item.password }}" | smbpasswd -s -a "{{ item.name }}"
+    executable: /bin/bash
+  loop: "{{ samba_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in (samba_accounts.stdout_lines | map('split', ':') | map('first') | list)
+  changed_when: true
+  no_log: true
+
+- name: Template smb.conf
+  ansible.builtin.template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart smbd
+
+- name: Set share directory group ownership and mode
+  ansible.builtin.file:
+    path: "{{ samba_share_path }}"
+    state: directory
+    group: "{{ samba_share_group }}"
+    mode: "2770"
+
+- name: Enable and start smbd
+  ansible.builtin.systemd:
+    name: smbd
+    enabled: true
+    state: started
+
+- name: Mask nmbd
+  ansible.builtin.systemd:
+    name: nmbd
+    masked: true
+    state: stopped

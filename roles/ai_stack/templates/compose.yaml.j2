@@ -1,0 +1,49 @@
+# Managed by Ansible (roles/ai_stack). Secrets live in env/*.env, not here.
+# Each service gets its own env file so no container holds another's keys.
+name: ai-stack
+
+services:
+  open-webui:
+    image: {{ ai_stack_open_webui_image }}
+    restart: unless-stopped
+    ports:
+      - "{{ ai_stack_open_webui_port }}:8080"
+    env_file: env/open-webui.env
+    volumes:
+      - open-webui-data:/app/backend/data
+
+  litellm:
+    image: {{ ai_stack_litellm_image }}
+    restart: unless-stopped
+    # On the LAN, not just localhost: the Pi sandbox calls it directly.
+    ports:
+      - "{{ ai_stack_litellm_port }}:4000"
+    env_file: env/litellm.env
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  litellm-db:
+    image: {{ ai_stack_litellm_db_image }}
+    restart: unless-stopped
+    env_file: env/litellm-db.env
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  open-webui-data:
+  litellm-db-data:

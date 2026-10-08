@@ -1,0 +1,54 @@
+---
+ai_stack_dir: /opt/ai-stack
+
+# Pin exact tags. Check https://github.com/open-webui/open-webui/releases
+ai_stack_open_webui_image: ghcr.io/open-webui/open-webui:v0.11.4
+ai_stack_open_webui_port: 3000
+# Required: the public URL users reach Open WebUI at, e.g.
+# https://chat.example.com (the role asserts it is set).
+# ai_stack_open_webui_url:
+
+# The first account created becomes admin. Flip to false once that exists.
+# Open WebUI also persists this in its database after first launch, so turn
+# it off in Admin Panel > Settings > General as well.
+open_webui_enable_signup: false
+
+# --- LiteLLM gateway ------------------------------------------------------
+# Pinned by tag AND digest. The digest is the one cosign verified against
+# LiteLLM's signing key (commit 0112e53). To bump: pick a release, run the
+# cosign command from its release notes, and copy the verified digest here.
+# Background: LiteLLM's PyPI package was compromised in March 2026; the
+# image was not, which is why this stack uses the image.
+ai_stack_litellm_image: ghcr.io/berriai/litellm:v1.104.1@sha256:501909ec6f504551f263f82fe8c53cfa34679d5753de507a2df69680a6021ad8
+ai_stack_litellm_port: 4000
+ai_stack_litellm_db_image: postgres:16.15
+
+# Refuse Admin UI sign-in with the master key (LiteLLM's default fallback
+# when UI_PASSWORD is unset). Leave false until a proxy_admin user with a
+# password exists, or nobody can sign in to the UI. The master key keeps
+# working for API calls either way.
+ai_stack_litellm_disable_env_credential_login: false
+
+# OpenRouter slugs behind each alias. Clients only ever see the alias.
+litellm_chat_model: openai/gpt-5-mini
+ai_stack_litellm_deepseek_flash_model: deepseek/deepseek-v4.1-flash
+# Used only when vault_deepseek_api_key is non-empty.
+ai_stack_litellm_deepseek_direct_model: deepseek/deepseek-flash
+
+# Open WebUI talks to LiteLLM over the compose network, never to a provider
+# directly. Open WebUI persists its connection settings in its database after
+# first launch, so a change here must also be made in Admin Panel > Settings >
+# Connections.
+ai_stack_open_webui_api_base_url: http://litellm:4000/v1
+
+# vault_* vars live in group_vars/all/vault.yml
+# LiteLLM virtual key "open-webui", created in the LiteLLM UI with its own
+# monthly budget.
+ai_stack_open_webui_api_key: "{{ vault_litellm_vkey_webui }}"
+ai_stack_webui_secret_key: "{{ vault_webui_secret_key }}"
+ai_stack_openrouter_key_gateway: "{{ vault_openrouter_key_gateway }}"
+ai_stack_litellm_master_key: "{{ vault_litellm_master_key }}"
+# Encrypts credentials LiteLLM stores in Postgres. Set once, never rotate.
+ai_stack_litellm_salt_key: "{{ vault_litellm_salt_key }}"
+ai_stack_litellm_db_password: "{{ vault_litellm_db_password }}"
+ai_stack_deepseek_api_key: "{{ vault_deepseek_api_key | default('') }}"

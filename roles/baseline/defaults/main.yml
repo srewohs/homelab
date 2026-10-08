@@ -1,0 +1,29 @@
+---
+# Applied to every container in the lab. Keep this genuinely universal:
+# if a task needs a `when:` for half your hosts, it belongs in a service role.
+
+baseline_timezone: Etc/UTC
+baseline_locale: en_US.UTF-8
+
+baseline_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - rsync
+  - vim
+  - htop
+  - python3-debian   # required by ansible.builtin.deb822_repository
+  - locales
+
+# Optional Telegraf agent, so every container reports to InfluxDB without
+# being added by hand. Off by default. To enable, set
+# baseline_telegraf_influx_url and vault_influx_token as well (the role
+# asserts both). Verify the [[outputs.influxdb_v2]] block in
+# templates/telegraf.conf.j2 against a container that is already reporting
+# before trusting it.
+baseline_telegraf_enabled: false
+baseline_telegraf_influx_url: ""   # e.g. http://influxdb.home.arpa:8086
+baseline_telegraf_influx_org: "homelab"
+baseline_telegraf_influx_bucket: "telegraf"
+# vault_influx_token lives in group_vars/all/vault.yml
+baseline_telegraf_influx_token: "{{ vault_influx_token | default('') }}"

@@ -1,0 +1,4 @@
+- name: Deploy Traefik
+  hosts: proxy
+  roles:
+    - traefik

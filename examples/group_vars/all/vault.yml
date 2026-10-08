@@ -1,0 +1,31 @@
+---
+# Every vault variable the roles reference, with placeholder values.
+# In your own repo, put the real values in this file and encrypt it:
+#   ansible-vault encrypt group_vars/all/vault.yml
+# Random values: openssl rand -hex 32
+
+# traefik
+vault_cloudflare_dns_api_token: "CHANGEME"   # Cloudflare token, Zone:DNS:Edit
+
+# samba: one per entry in samba_users
+vault_samba_password_alice: "CHANGEME"
+
+# tailscale
+vault_tailscale_authkey: "CHANGEME"          # only needed for new nodes
+
+# baseline (only when baseline_telegraf_enabled is true)
+vault_influx_token: ""
+
+# ai_stack
+vault_webui_secret_key: "CHANGEME"           # random
+vault_openrouter_key_gateway: "CHANGEME"     # OpenRouter key with a credit limit
+vault_litellm_master_key: "sk-CHANGEME"      # must start with sk-
+vault_litellm_salt_key: "CHANGEME"           # random; set once, never change
+vault_litellm_db_password: "CHANGEME"        # random
+vault_litellm_vkey_webui: "CHANGEME"         # virtual key created in the LiteLLM UI
+vault_deepseek_api_key: ""                   # optional; empty skips DeepSeek direct
+
+# pi_sandbox
+vault_litellm_vkey_pi: "CHANGEME"            # virtual key created in the LiteLLM UI
+vault_git_email: "CHANGEME"
+vault_pi_github_token: ""                    # optional; empty means no GitHub access

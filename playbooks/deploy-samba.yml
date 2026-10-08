@@ -1,0 +1,4 @@
+- name: Deploy Samba
+  hosts: fileshare
+  roles:
+    - samba

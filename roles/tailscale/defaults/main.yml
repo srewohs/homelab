@@ -1,0 +1,19 @@
+---
+tailscale_hostname: "{{ inventory_hostname }}"
+
+# Set to false when you are migrating an EXISTING node's identity by copying
+# tailscaled.state from the old container. In that case the node is already
+# authenticated the moment tailscaled starts, and running `tailscale up` with
+# a fresh authkey would register a SECOND machine and lose the shares.
+#
+# true  = brand new node, authenticate with an authkey
+# false = install and enable only; identity arrives via a restored state file
+tailscale_authenticate: true
+
+# vault_tailscale_authkey lives in group_vars/all/vault.yml
+tailscale_authkey: "{{ vault_tailscale_authkey | default('') }}"
+
+# Deliberately NOT accepting subnet routes. This node is on the LAN already;
+# accepting routes would send LAN traffic back through a subnet router for no
+# reason. (Your PC needs --accept-routes; a LAN server does not.)
+tailscale_up_args: "--hostname={{ tailscale_hostname }} --accept-dns=false"

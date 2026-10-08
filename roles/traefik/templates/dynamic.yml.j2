@@ -1,0 +1,22 @@
+http:
+  routers:
+{% for svc in traefik_services %}
+    {{ svc.name }}:
+      rule: "{% for d in traefik_base_domains %}Host(`{{ svc.name }}.{{ d }}`){% if not loop.last %} || {% endif %}{% endfor %}"
+      entryPoints:
+        - websecure
+      service: {{ svc.name }}
+{% endfor %}
+    dashboard:
+      rule: "{% for d in traefik_base_domains %}Host(`traefik.{{ d }}`){% if not loop.last %} || {% endif %}{% endfor %}"
+      entryPoints:
+        - websecure
+      service: api@internal
+
+  services:
+{% for svc in traefik_services %}
+    {{ svc.name }}:
+      loadBalancer:
+        servers:
+          - url: "{{ svc.url }}"
+{% endfor %}

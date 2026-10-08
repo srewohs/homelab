@@ -1,0 +1,103 @@
+---
+- name: Create apt keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ baseline_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Set timezone
+  ansible.builtin.file:
+    src: "/usr/share/zoneinfo/{{ baseline_timezone }}"
+    dest: /etc/localtime
+    state: link
+    force: true
+
+- name: Write /etc/timezone
+  ansible.builtin.copy:
+    content: "{{ baseline_timezone }}\n"
+    dest: /etc/timezone
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable locale in /etc/locale.gen
+  ansible.builtin.lineinfile:
+    path: /etc/locale.gen
+    regexp: "^#?\\s*{{ baseline_locale }} UTF-8"
+    line: "{{ baseline_locale }} UTF-8"
+    state: present
+  notify: Generate locales
+
+# --- Telegraf -------------------------------------------------------------
+# InfluxData signs its repo with a key that must be dearmored. Unlike
+# Jellyfin's, this one is not published in .asc form.
+
+- name: Check Telegraf variables
+  ansible.builtin.assert:
+    that:
+      - baseline_telegraf_influx_url | length > 0
+      - baseline_telegraf_influx_token | length > 0
+    fail_msg: >-
+      baseline_telegraf_enabled is true, so set baseline_telegraf_influx_url
+      and vault_influx_token as well.
+    quiet: true
+  when: baseline_telegraf_enabled
+
+- name: Fetch InfluxData signing key
+  ansible.builtin.get_url:
+    url: https://repos.influxdata.com/influxdata-archive.key
+    dest: /etc/apt/keyrings/influxdata.asc
+    mode: "0644"
+  when: baseline_telegraf_enabled
+
+- name: Add InfluxData repository
+  ansible.builtin.deb822_repository:
+    name: influxdata
+    types: [deb]
+    uris: "https://repos.influxdata.com/debian"
+    suites: [stable]
+    components: [main]
+    architectures: [amd64]
+    signed_by: /etc/apt/keyrings/influxdata.asc
+    state: present
+  when: baseline_telegraf_enabled
+
+- name: Install telegraf
+  ansible.builtin.apt:
+    name: telegraf
+    state: present
+    update_cache: true
+  when: baseline_telegraf_enabled
+
+- name: Install InfluxData keyring package
+  ansible.builtin.apt:
+    name: influxdata-archive-keyring
+    state: present
+  when: baseline_telegraf_enabled
+
+- name: Template telegraf config
+  ansible.builtin.template:
+    src: telegraf.conf.j2
+    dest: /etc/telegraf/telegraf.conf
+    owner: root
+    group: telegraf
+    mode: "0640"
+  notify: Restart telegraf
+  when: baseline_telegraf_enabled
+
+- name: Enable telegraf
+  ansible.builtin.systemd:
+    name: telegraf
+    enabled: true
+    state: started
+  when: baseline_telegraf_enabled
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,14 @@
+{
+  "providers": {
+    "litellm": {
+      "baseUrl": "{{ pi_sandbox_litellm_base_url }}",
+      "api": "openai-completions",
+      "apiKey": "$LITELLM_API_KEY",
+      "models": [
+{% for m in pi_sandbox_litellm_models %}
+        { "id": "{{ m }}" }{{ "," if not loop.last else "" }}
+{% endfor %}
+      ]
+    }
+  }
+}

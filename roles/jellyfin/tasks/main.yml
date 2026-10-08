@@ -1,0 +1,156 @@
+---
+# ---------------------------------------------------------------------------
+# SCOPE
+#
+# This role owns the container: repos, packages, GPU group membership,
+# service state.
+#
+# It deliberately does NOT own /etc/jellyfin/*.xml. Jellyfin rewrites those
+# files itself whenever you change a setting in the dashboard, so templating
+# them means every UI change gets silently reverted on the next playbook run.
+# Those files are captured read-only by playbooks/capture-jellyfin-config.yml
+# instead.
+#
+# It also does not own /var/lib/jellyfin, which is state on its own ZFS
+# dataset (mp2) and is handled by snapshots.
+# ---------------------------------------------------------------------------
+
+- name: Check the render device was passed into the container
+  ansible.builtin.stat:
+    path: "{{ jellyfin_render_device }}"
+  register: jellyfin_render_stat
+
+- name: Fail early if GPU passthrough is missing
+  ansible.builtin.fail:
+    msg: >-
+      {{ jellyfin_render_device }} not found. Add
+      "dev0: /dev/dri/renderD128,gid=<render gid>" to the container's .conf on
+      the Proxmox host and restart it. The gid is release-dependent: 992 on
+      trixie, 104 on bookworm. Nothing below will work without it.
+  when: not jellyfin_render_stat.stat.exists
+
+# The gid= value in `dev0` sets the device's group inside the container. That
+# GID may or may not correspond to an existing group name, and Debian assigns
+# system GIDs in a way that makes hardcoding 104 fragile. Discover it instead.
+- name: Read the render device's group
+  ansible.builtin.set_fact:
+    jellyfin_render_gid: "{{ jellyfin_render_stat.stat.gid }}"
+
+- name: Look up whether a group already owns that GID
+  ansible.builtin.command: "getent group {{ jellyfin_render_gid }}"
+  register: jellyfin_render_group_lookup
+  changed_when: false
+  failed_when: false
+
+- name: Create a 'render' group on that GID if nothing claims it
+  ansible.builtin.group:
+    name: render
+    gid: "{{ jellyfin_render_gid }}"
+    state: present
+  when: jellyfin_render_group_lookup.rc != 0
+
+- name: Record the group name owning the render device
+  ansible.builtin.set_fact:
+    jellyfin_render_group: >-
+      {{ (jellyfin_render_group_lookup.stdout.split(':')[0])
+         if jellyfin_render_group_lookup.rc == 0 else 'render' }}
+
+- name: Warn if the render device is not owned by a 'render' group
+  ansible.builtin.debug:
+    msg: >-
+      {{ jellyfin_render_device }} is owned by group
+      '{{ jellyfin_render_group }}' (gid {{ jellyfin_render_gid }}), not
+      'render'. This works, but usually means the gid= in the container's
+      dev0 line does not match this Debian release. On trixie the render
+      group is 992; on bookworm it was 104.
+  when: jellyfin_render_group != 'render'
+
+# --- apt sources ----------------------------------------------------------
+
+- name: Add contrib/non-free components
+  ansible.builtin.deb822_repository:
+    name: debian-nonfree
+    types: [deb]
+    uris: http://deb.debian.org/debian
+    suites:
+      - "{{ ansible_facts['distribution_release'] }}"
+      - "{{ ansible_facts['distribution_release'] }}-updates"
+    components: [contrib, non-free, non-free-firmware]
+    state: present
+  when: jellyfin_enable_nonfree
+
+# Jellyfin publishes an ASCII-armored key. Modern apt reads .asc directly,
+# so there is no gpg --dearmor step to get wrong.
+- name: Fetch Jellyfin signing key
+  ansible.builtin.get_url:
+    url: https://repo.jellyfin.org/jellyfin_team.gpg.key
+    dest: /etc/apt/keyrings/jellyfin.asc
+    mode: "0644"
+
+- name: Add Jellyfin repository
+  ansible.builtin.deb822_repository:
+    name: jellyfin
+    types: [deb]
+    uris: https://repo.jellyfin.org/debian
+    suites: ["{{ ansible_facts['distribution_release'] }}"]
+    components: [main]
+    architectures: [amd64]
+    signed_by: /etc/apt/keyrings/jellyfin.asc
+    state: present
+
+# --- packages -------------------------------------------------------------
+
+- name: Install GPU diagnostic tooling
+  ansible.builtin.apt:
+    name: "{{ jellyfin_gpu_packages }}"
+    state: present
+    update_cache: true
+  when: jellyfin_install_gpu_tools
+
+# The `jellyfin` metapackage pulls jellyfin-server, jellyfin-web and
+# jellyfin-ffmpeg7. The bundled ffmpeg is what actually drives the Arc.
+- name: Install Jellyfin
+  ansible.builtin.apt:
+    name: jellyfin
+    state: present
+    update_cache: true
+  notify: Restart jellyfin
+
+# --- ownership ------------------------------------------------------------
+# /var/lib/jellyfin is a bind-mounted ZFS dataset (mp2). Because the
+# mountpoint already exists when dpkg runs, the postinst does not always chown
+# it, and Jellyfin then fails to start with a permissions error that does not
+# obviously point at the mount.
+- name: Ensure the data directory is owned by jellyfin
+  ansible.builtin.file:
+    path: /var/lib/jellyfin
+    state: directory
+    owner: jellyfin
+    group: jellyfin
+    mode: "0750"
+
+# /transcode is mp1, a bind-mounted ZFS dataset owned by host root, which maps
+# to `nobody` inside an unprivileged container. Jellyfin writes a marker file
+# here before starting any HLS session, so without this every playback attempt
+# dies with UnauthorizedAccessException before ffmpeg is ever invoked.
+- name: Ensure the transcode directory is owned by jellyfin
+  ansible.builtin.file:
+    path: "{{ jellyfin_transcode_path }}"
+    state: directory
+    owner: jellyfin
+    group: jellyfin
+    mode: "0750"
+  when: jellyfin_transcode_path | length > 0
+
+- name: Add jellyfin to the render group
+  ansible.builtin.user:
+    name: jellyfin
+    groups: "{{ jellyfin_render_group }}"
+    append: true
+  notify: Restart jellyfin
+
+- name: Enable and start Jellyfin
+  ansible.builtin.systemd:
+    name: jellyfin
+    enabled: "{{ jellyfin_service_enabled }}"
+    state: started

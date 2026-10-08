@@ -1,0 +1,7 @@
+---
+# config.yaml is a bind mount, so compose sees no change when it is edited.
+- name: Restart litellm
+  community.docker.docker_compose_v2:
+    project_src: "{{ ai_stack_dir }}"
+    services: [litellm]
+    state: restarted

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(ansible-playbook *)",
+      "Bash(ansible-inventory --graph*)",
+      "Bash(ansible-galaxy collection list *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git switch *)",
+      "Bash(curl *)",
+      "Bash(dig *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(ansible-galaxy collection install *)"
+    ],
+    "deny": [
+      "Bash(ansible-vault *)",
+      "Bash(ansible-inventory --list*)",
+      "Bash(ansible-inventory --host*)",
+      "Read(~/.ansible-vault-pass)",
+      "Read(~/.ansible/vault_pass*)"
+    ]
+  }
+}

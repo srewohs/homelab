@@ -1,0 +1,19 @@
+samba_share_name: shared
+samba_share_path: /srv/share
+samba_share_group: smbshare
+samba_share_gid: 3000
+
+# Required (the role asserts both are non-empty):
+#
+# samba_users: accounts that can use the share. Passwords belong in the vault.
+#   - name: alice
+#     uid: 3000
+#     password: "{{ vault_samba_password_alice }}"
+samba_users: []
+
+# Clients allowed to connect, as addresses or CIDRs. Keep this in addition to
+# any firewall rule: two independent things then have to be wrong before the
+# share is reachable from somewhere it shouldn't be.
+#   - 127.0.0.1
+#   - 192.168.20.0/24
+samba_hosts_allow: []

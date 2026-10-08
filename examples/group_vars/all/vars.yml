@@ -1,0 +1,44 @@
+---
+# Every variable the roles require, plus the common ones you will likely want
+# to change. Defaults for everything else are in roles/<role>/defaults and
+# documented in roles/<role>/README.md. Values here are placeholders.
+#
+# Everything is in group_vars/all for brevity. In a real inventory, per-group
+# files (group_vars/proxy/vars.yml, ...) keep each group's values together.
+
+ansible_user: root
+
+# --- baseline (all hosts) ---------------------------------------------------
+baseline_timezone: Etc/UTC
+# Telegraf is off by default. To enable it, set all three:
+# baseline_telegraf_enabled: true
+# baseline_telegraf_influx_url: http://influxdb.home.arpa:8086
+# vault_influx_token in vault.yml
+
+# --- traefik (proxy) --------------------------------------------------------
+traefik_acme_email: admin@example.com
+traefik_base_domains:
+  - example.com
+traefik_services:
+  - name: jellyfin
+    url: http://jellyfin.home.arpa:8096
+  - name: chat
+    url: http://ai-gateway.home.arpa:3000
+  - name: llm
+    url: http://ai-gateway.home.arpa:4000
+
+# --- samba (fileshare) ------------------------------------------------------
+samba_users:
+  - name: alice
+    uid: 3000
+    password: "{{ vault_samba_password_alice }}"
+samba_hosts_allow:
+  - 127.0.0.1
+  - 192.0.2.0/24
+
+# --- ai_stack (ai_gateway) --------------------------------------------------
+ai_stack_open_webui_url: https://chat.example.com
+
+# --- pi_sandbox (pi_sandbox) ------------------------------------------------
+pi_sandbox_litellm_base_url: http://ai-gateway.home.arpa:4000/v1
+pi_sandbox_git_name: Alice Example     # commit author name

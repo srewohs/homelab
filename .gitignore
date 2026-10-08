@@ -1,0 +1,17 @@
+# Personal settings
+.envrc
+.claude/settings.local.json
+
+# Vault password files
+.ansible-vault-pass
+*vault-pass*
+*vault_pass*
+
+# Ansible
+*.retry
+check-output/
+
+# Editors and OS
+__pycache__/
+.vscode/
+*:Zone.Identifier

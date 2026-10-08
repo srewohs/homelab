@@ -1,0 +1,24 @@
+# Lives at /opt/ai-stack/litellm/config.yaml. No secrets here: keys are read from
+# the container environment via os.environ/.
+#
+# NO FALLBACKS on any alias, and do not add router-level fallbacks either.
+# A private local-model alias is coming later; a fallback there would
+# silently send private prompts to a cloud provider when the local model
+# is down.
+model_list:
+  - model_name: chat
+    litellm_params:
+      model: openrouter/openai/gpt-5-mini
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: deepseek-flash
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v4.1-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+
+litellm_settings:
+  telemetry: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

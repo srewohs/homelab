@@ -1,0 +1,44 @@
+---
+pi_sandbox_packages:
+  - git
+  - tmux
+  - curl
+  - ca-certificates
+
+# NodeSource publishes one apt repo per major, so the major is pinned by the
+# repo URL itself. Bump deliberately; Pi's engines field needs >=22.19.
+pi_sandbox_node_major: 24
+
+# Check https://www.npmjs.com/package/@earendil-works/pi-coding-agent
+# The old @mariozechner/pi-coding-agent name is deprecated.
+pi_sandbox_pi_package: "@earendil-works/pi-coding-agent"
+pi_sandbox_pi_version: "1.0.4"
+
+pi_sandbox_user: agent
+pi_sandbox_home: "/home/{{ pi_sandbox_user }}"
+pi_sandbox_npm_prefix: "{{ pi_sandbox_home }}/.npm-global"
+pi_sandbox_workspace: "{{ pi_sandbox_home }}/code"
+
+# Public key that may log in as the agent user. Defaults to the controller
+# user's ~/.ssh/id_ed25519.pub.
+pi_sandbox_authorized_key: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'HOME') + '/.ssh/id_ed25519.pub') }}"
+
+# All of Pi's API traffic goes through the LiteLLM gateway, which holds the
+# real provider keys. Pi only ever sees its own budgeted virtual key. Aliases
+# must exist in the gateway's config.yaml.
+# Required: the gateway's OpenAI-compatible base URL, e.g.
+# http://ai-gateway.home.arpa:4000/v1 (the role asserts it is set).
+# pi_sandbox_litellm_base_url:
+pi_sandbox_litellm_models:
+  - chat
+  - deepseek-flash
+
+# vault_* vars live in group_vars/all/vault.yml
+# LiteLLM virtual key "pi", created in the LiteLLM UI.
+pi_sandbox_litellm_key: "{{ vault_litellm_vkey_pi }}"
+# Required: commit author name, a plain variable (not a secret).
+# pi_sandbox_git_name:
+pi_sandbox_git_email: "{{ vault_git_email }}"
+# Empty means no GitHub credentials at all: no GITHUB_TOKEN in pi.env and no
+# credential helper. Pi can still clone public repos and work locally.
+pi_sandbox_github_token: "{{ vault_pi_github_token | default('') }}"

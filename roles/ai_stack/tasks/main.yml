@@ -1,0 +1,68 @@
+---
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - ai_stack_open_webui_url is defined and ai_stack_open_webui_url | length > 0
+    fail_msg: >-
+      Set ai_stack_open_webui_url in inventory vars. See
+      roles/ai_stack/README.md.
+    quiet: true
+
+- name: Create stack directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ ai_stack_dir }}", mode: "0750" }
+    - { path: "{{ ai_stack_dir }}/env", mode: "0700" }
+    - { path: "{{ ai_stack_dir }}/litellm", mode: "0755" }
+
+- name: Template compose.yaml
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ ai_stack_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Template env files with secrets
+  ansible.builtin.template:
+    src: "{{ item }}.env.j2"
+    dest: "{{ ai_stack_dir }}/env/{{ item }}.env"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - open-webui
+    - litellm
+    - litellm-db
+  no_log: true
+
+# Superseded by env/open-webui.env.
+- name: Remove the old shared .env
+  ansible.builtin.file:
+    path: "{{ ai_stack_dir }}/.env"
+    state: absent
+
+- name: Template LiteLLM config
+  ansible.builtin.template:
+    src: litellm/config.yaml.j2
+    dest: "{{ ai_stack_dir }}/litellm/config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart litellm
+
+# Compose hashes the resolved config, env_file contents included, so a
+# changed env file or image tag recreates only the affected service. Never
+# `down -v`: the named volumes hold Open WebUI's users and chats and
+# LiteLLM's keys and spend.
+- name: Bring the stack up
+  community.docker.docker_compose_v2:
+    project_src: "{{ ai_stack_dir }}"
+    state: present
+    wait: true
+    wait_timeout: 300

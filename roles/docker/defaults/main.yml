@@ -1,0 +1,16 @@
+---
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# vfs is Docker's fallback when no overlay-capable driver works (historically
+# a ZFS-backed rootfs). It copies every layer in full and balloons disk usage,
+# so treat it as a failure rather than something to run on. overlayfs is what
+# the containerd image store (default on new installs since Engine 29)
+# reports; it is the same kernel overlay as overlay2.
+docker_allowed_storage_drivers:
+  - overlay2
+  - overlayfs

@@ -1,0 +1,36 @@
+# Managed by Ansible (roles/ai_stack). No secrets here: keys are read from
+# the container environment via os.environ/.
+#
+# NO FALLBACKS on any alias, and do not add router-level fallbacks either.
+# A private local-model alias is coming later; a fallback there would
+# silently send private prompts to a cloud provider when the local model
+# is down.
+model_list:
+  - model_name: chat
+    litellm_params:
+      model: openrouter/{{ litellm_chat_model }}
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: deepseek-flash
+    litellm_params:
+      model: openrouter/{{ ai_stack_litellm_deepseek_flash_model }}
+      api_key: os.environ/OPENROUTER_API_KEY
+{% if ai_stack_deepseek_api_key | length > 0 %}
+
+  - model_name: deepseek-flash-direct
+    litellm_params:
+      model: {{ ai_stack_litellm_deepseek_direct_model }}
+      api_key: os.environ/DEEPSEEK_API_KEY
+{% endif %}
+
+litellm_settings:
+  telemetry: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+{% if ai_stack_litellm_disable_env_credential_login | bool %}
+  # Admin UI rejects UI_USERNAME/UI_PASSWORD and the master key; only
+  # database users can sign in. The master key still works for API calls.
+  disable_env_credential_login: true
+{% endif %}
