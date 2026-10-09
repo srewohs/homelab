@@ -6,13 +6,12 @@ Two Proxmox LXC containers that give a homelab a private chat UI, a single
 budgeted API gateway, and a coding agent that is allowed to run arbitrary shell
 commands without being able to reach the real API keys. Subscriptions (ChatGPT
 Plus for the Pi agent, Claude for Claude Code) talk to their vendors directly
-and never pass through this stack. Everything billed per token (Open WebUI, Pi's
-non-subscription models, later Home Assistant and scripts) goes through a
-LiteLLM gateway that holds the only real provider key and hands each client its
-own virtual key with a monthly budget.
+and never pass through this stack. Everything billed per token (Open WebUI,
+Pi's non-subscription models, and possibly Home Assistant and scripts later)
+goes through a LiteLLM gateway that holds the only real provider key and hands
+each client its own virtual key with a monthly budget.
 
-Everything below was built with Ansible in one evening and is described as it
-actually ended up, not as originally planned.
+Everything below was built with Ansible and is described as the final result.
 
 ## Architecture
 
@@ -56,10 +55,16 @@ flowchart LR
 | Pi on an `openai` (Codex) model | ChatGPT Plus subscription, direct to OpenAI |
 | Claude Code | Claude subscription, direct to Anthropic |
 
-A common confusion: the `chat` alias points at `openai/gpt-5-mini` **through
-OpenRouter**. That is an OpenAI model billed per token as OpenRouter credits.
-A ChatGPT subscription includes no API access, so only tools with a ChatGPT
-login flow (Pi's Codex login, OpenAI's own apps) can use it.
+Some design decisions that might not be obvious:
+
+- The `chat` alias points at `openai/gpt-5-mini` **through OpenRouter**. That
+  is an OpenAI model billed per token as OpenRouter credits. A ChatGPT
+  subscription includes no API access, so only tools with a ChatGPT login
+  flow (Pi's Codex login, OpenAI's own apps) can use it.
+- Claude subscriptions are more restricted: Anthropic doesn't allow them to
+  be used through third-party agents, so Claude stays in Claude Code and Pi
+  uses ChatGPT or the gateway. See Anthropic's
+  [consumer terms](https://www.anthropic.com/legal/consumer-terms).
 
 ## Prerequisites
 

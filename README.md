@@ -1,12 +1,12 @@
 # homelab
 
-Ansible roles and playbooks for a small Proxmox homelab: Debian LXC
+Ansible roles and playbooks for my Proxmox homelab: Debian LXC
 containers running Traefik, Samba, Jellyfin with Intel GPU transcoding, and a
 self-hosted AI stack (Open WebUI, a LiteLLM gateway, and a sandboxed coding
 agent).
 
-Ansible configures containers that already exist. It does not create them;
-that happens on the Proxmox host (see
+For this setup, Ansible configures containers that already exist. It does
+not create them; that happens on the Proxmox host (see
 [`scripts/create-ai-containers.sh`](scripts/create-ai-containers.sh) for one
 example).
 
