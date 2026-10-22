@@ -25,3 +25,9 @@ all:
           hosts:
             pi-sandbox:
               ansible_host: 192.0.2.14
+    # The Proxmox node itself, for pbs_host_backup only. Keep it in its own
+    # group so container playbooks never reach it.
+    pve_nodes:
+      hosts:
+        pve:
+          ansible_host: 192.0.2.2

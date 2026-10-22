@@ -5,8 +5,9 @@ containers running Traefik, Samba, Jellyfin with Intel GPU transcoding, and a
 self-hosted AI stack (Open WebUI, a LiteLLM gateway, and a sandboxed coding
 agent).
 
-For this setup, Ansible configures containers that already exist. It does
-not create them; that happens on the Proxmox host (see
+For this setup, Ansible configures containers that already exist, plus
+one role (`pbs_host_backup`) that runs on the Proxmox node itself. It does
+not create containers; that happens on the Proxmox host (see
 [`scripts/create-ai-containers.sh`](scripts/create-ai-containers.sh) for one
 example).
 
@@ -31,6 +32,7 @@ example).
 | [`jellyfin`](roles/jellyfin/README.md) | Jellyfin with an Intel GPU passed into the container |
 | [`ai_stack`](roles/ai_stack/README.md) | Open WebUI and LiteLLM under Docker Compose |
 | [`pi_sandbox`](roles/pi_sandbox/README.md) | A container for the Pi coding agent, reaching models only through LiteLLM |
+| [`pbs_host_backup`](roles/pbs_host_backup/README.md) | Host directories (data pools, `/etc`) to Proxmox Backup Server on a timer. Runs on the Proxmox node |
 
 ## Code here, data elsewhere
 

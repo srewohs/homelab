@@ -1,0 +1,4 @@
+- name: Deploy the host backup to Proxmox Backup Server
+  hosts: pve_nodes
+  roles:
+    - pbs_host_backup

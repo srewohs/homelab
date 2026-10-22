@@ -1,0 +1,12 @@
+# Managed by Ansible (pbs_host_backup).
+[Unit]
+Description=Back up host directories to Proxmox Backup Server
+Wants=network-online.target
+After=network-online.target
+OnFailure=pbs-host-backup-failed.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pbs-host-backup
+Nice=10
+IOSchedulingClass=idle

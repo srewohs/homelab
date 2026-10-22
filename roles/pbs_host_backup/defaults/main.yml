@@ -1,0 +1,43 @@
+---
+# Where to back up, as user@realm!token@host:datastore.
+# Required, for example: backup@pbs!host@pbs.home.arpa:main
+pbs_host_backup_repository: ""
+
+# The API token's secret. Required; keep it in the vault.
+#   pbs_host_backup_token_secret: "{{ vault_pbs_host_backup_token_secret }}"
+pbs_host_backup_token_secret: ""
+
+# SHA-256 fingerprint of the PBS server certificate, for a self-signed
+# certificate (PBS dashboard, Show Fingerprint). Leave empty if the
+# certificate is trusted.
+pbs_host_backup_fingerprint: ""
+
+# Namespace on the datastore. Empty means the root namespace.
+pbs_host_backup_namespace: ""
+
+# Directories to back up, one archive each. Required. Archive names may use
+# letters, digits, '_' and '-'.
+#   - name: etc
+#     path: /etc
+pbs_host_backup_archives: []
+
+# Mount points below an archive path to include anyway. The client does not
+# cross into other file systems unless told to; on a Proxmox VE node,
+# /etc/pve is one (a FUSE mount).
+pbs_host_backup_include_dev: []
+
+# Client-side encryption key file (proxmox-backup-client key format). Empty
+# means the backup is not encrypted. A Proxmox VE node already has one per
+# encrypted PBS storage, in /etc/pve/priv/storage/<storage-id>.enc.
+pbs_host_backup_keyfile: ""
+
+# metadata (fast: unchanged files are found by their metadata) or data
+# (reads everything).
+pbs_host_backup_change_detection_mode: metadata
+
+# systemd OnCalendar expression.
+pbs_host_backup_schedule: "*-*-* 02:30:00"
+
+# Discord-compatible webhook URL, called when a run fails. Empty disables it.
+# It is a secret: keep it in the vault.
+pbs_host_backup_failure_webhook: ""

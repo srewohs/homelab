@@ -1,0 +1,11 @@
+#!/bin/bash
+# Managed by Ansible (pbs_host_backup). Run by pbs-host-backup-failed.service.
+set -euo pipefail
+
+# shellcheck disable=SC1091
+. /etc/pbs-host-backup/env
+[ -n "${PBS_HOST_BACKUP_WEBHOOK:-}" ] || exit 0
+
+msg="**Host backup failed on $(hostname)**. Details: journalctl -u pbs-host-backup"
+curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+  -d "{\"content\": \"$msg\"}" "$PBS_HOST_BACKUP_WEBHOOK" >/dev/null

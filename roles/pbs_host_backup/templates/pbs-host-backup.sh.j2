@@ -1,0 +1,24 @@
+#!/bin/bash
+# Managed by Ansible (pbs_host_backup). Safe to run by hand.
+set -euo pipefail
+
+set -a
+# shellcheck disable=SC1091
+. /etc/pbs-host-backup/env
+set +a
+unset PBS_HOST_BACKUP_WEBHOOK
+
+exec proxmox-backup-client backup \
+{% for archive in pbs_host_backup_archives %}
+  {{ (archive.name ~ '.pxar:' ~ archive.path) | quote }} \
+{% endfor %}
+{% for dev in pbs_host_backup_include_dev %}
+  --include-dev {{ dev | quote }} \
+{% endfor %}
+{% if pbs_host_backup_keyfile %}
+  --keyfile {{ pbs_host_backup_keyfile | quote }} --crypt-mode encrypt \
+{% endif %}
+{% if pbs_host_backup_namespace %}
+  --ns {{ pbs_host_backup_namespace | quote }} \
+{% endif %}
+  --change-detection-mode {{ pbs_host_backup_change_detection_mode }}

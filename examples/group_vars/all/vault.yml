@@ -29,3 +29,7 @@ vault_deepseek_api_key: ""                   # optional; empty skips DeepSeek di
 vault_litellm_vkey_pi: "CHANGEME"            # virtual key created in the LiteLLM UI
 vault_git_email: "CHANGEME"
 vault_pi_github_token: ""                    # optional; empty means no GitHub access
+
+# pbs_host_backup
+vault_pbs_host_backup_token_secret: "CHANGEME"  # PBS API token secret
+vault_pbs_host_backup_webhook: ""               # optional; Discord webhook URL

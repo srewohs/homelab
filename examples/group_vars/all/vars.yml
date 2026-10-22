@@ -42,3 +42,18 @@ ai_stack_open_webui_url: https://chat.example.com
 # --- pi_sandbox (pi_sandbox) ------------------------------------------------
 pi_sandbox_litellm_base_url: http://ai-gateway.home.arpa:4000/v1
 pi_sandbox_git_name: Alice Example     # commit author name
+
+# --- pbs_host_backup (pve_nodes) --------------------------------------------
+pbs_host_backup_repository: "host@pbs!backup@pbs.home.arpa:main"
+pbs_host_backup_token_secret: "{{ vault_pbs_host_backup_token_secret }}"
+pbs_host_backup_fingerprint: ""        # PBS dashboard, Show Fingerprint
+pbs_host_backup_namespace: pve-host
+pbs_host_backup_archives:
+  - name: etc
+    path: /etc
+  - name: share
+    path: /tank/share
+pbs_host_backup_include_dev:
+  - /etc/pve
+pbs_host_backup_keyfile: /etc/pve/priv/storage/pbs.enc
+pbs_host_backup_failure_webhook: "{{ vault_pbs_host_backup_webhook }}"

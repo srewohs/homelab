@@ -1,0 +1,7 @@
+# Managed by Ansible (pbs_host_backup).
+[Unit]
+Description=Report a failed host backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pbs-host-backup-notify

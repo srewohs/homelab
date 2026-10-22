@@ -1,0 +1,79 @@
+---
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - pbs_host_backup_repository | length > 0
+      - pbs_host_backup_token_secret | length > 0
+      - pbs_host_backup_archives | length > 0
+      - pbs_host_backup_archives | rejectattr('name', 'match', '^[A-Za-z0-9_-]+$') | list | length == 0
+      - pbs_host_backup_change_detection_mode in ['metadata', 'data', 'legacy']
+    fail_msg: >-
+      Set pbs_host_backup_repository, pbs_host_backup_token_secret and
+      pbs_host_backup_archives (names: letters, digits, '_' and '-') in
+      inventory vars. See roles/pbs_host_backup/README.md.
+    quiet: true
+
+- name: Install proxmox-backup-client
+  ansible.builtin.apt:
+    name: proxmox-backup-client
+    state: present
+
+- name: Check the key file exists
+  ansible.builtin.stat:
+    path: "{{ pbs_host_backup_keyfile }}"
+  register: pbs_host_backup_keyfile_stat
+  when: pbs_host_backup_keyfile | length > 0
+
+- name: Fail if the key file is missing
+  ansible.builtin.assert:
+    that: pbs_host_backup_keyfile_stat.stat.exists
+    fail_msg: "pbs_host_backup_keyfile {{ pbs_host_backup_keyfile }} does not exist."
+    quiet: true
+  when: pbs_host_backup_keyfile | length > 0
+
+- name: Config directory
+  ansible.builtin.file:
+    path: /etc/pbs-host-backup
+    state: directory
+    mode: "0700"
+
+- name: Environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: /etc/pbs-host-backup/env
+    mode: "0600"
+  no_log: true
+
+- name: Backup script
+  ansible.builtin.template:
+    src: pbs-host-backup.sh.j2
+    dest: /usr/local/sbin/pbs-host-backup
+    mode: "0700"
+
+- name: Failure notification script
+  ansible.builtin.template:
+    src: pbs-host-backup-notify.sh.j2
+    dest: /usr/local/sbin/pbs-host-backup-notify
+    mode: "0700"
+
+- name: Systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - pbs-host-backup.service
+    - pbs-host-backup.timer
+    - pbs-host-backup-failed.service
+  notify: Reload systemd
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+
+# In check mode the units were not written, so there is nothing to enable.
+- name: Enable and start the timer
+  ansible.builtin.systemd:
+    name: pbs-host-backup.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode

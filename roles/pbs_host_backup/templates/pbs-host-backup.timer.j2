@@ -1,0 +1,10 @@
+# Managed by Ansible (pbs_host_backup).
+[Unit]
+Description=Daily host backup to Proxmox Backup Server
+
+[Timer]
+OnCalendar={{ pbs_host_backup_schedule }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
