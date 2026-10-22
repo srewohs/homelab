@@ -10,10 +10,12 @@
 #
 #   ROOTFS_STORAGE=local-zfs
 #   GATEWAY=192.168.1.1
-#   DNS=192.168.1.53
-#   SEARCH_DOMAIN=home.arpa
 #   GATEWAY_CTID=135  GATEWAY_IP=192.168.1.135
 #   SANDBOX_CTID=136  SANDBOX_IP=192.168.1.136
+#
+# DNS and SEARCH_DOMAIN are optional. Leave them unset and the containers
+# use the node's DNS settings, so a change there reaches every container at
+# its next start. Set them only to give these two a resolver of their own.
 #
 # Safe to re-run: existing CTs are skipped.
 set -euo pipefail
@@ -24,15 +26,15 @@ ROOTFS_STORAGE="${ROOTFS_STORAGE:-}"            # storage for container disks
 BRIDGE="${BRIDGE:-vmbr0}"
 PREFIX_LEN="${PREFIX_LEN:-24}"                  # subnet prefix length for the CT addresses
 GATEWAY="${GATEWAY:-}"                          # LAN gateway (router) address
-DNS="${DNS:-}"                                  # LAN DNS server
-SEARCH_DOMAIN="${SEARCH_DOMAIN:-}"              # e.g. home.arpa
+DNS="${DNS:-}"                                  # optional; unset = use the node's DNS
+SEARCH_DOMAIN="${SEARCH_DOMAIN:-}"              # optional; e.g. home.arpa
 SSH_PUBKEY_FILE="${SSH_PUBKEY_FILE:-/root/ai-stack.pub}"
 GATEWAY_CTID="${GATEWAY_CTID:-}"  GATEWAY_IP="${GATEWAY_IP:-}"
 SANDBOX_CTID="${SANDBOX_CTID:-}"  SANDBOX_IP="${SANDBOX_IP:-}"
 # ---------------------------------------------------------------------------
 
 missing=()
-for v in ROOTFS_STORAGE GATEWAY DNS SEARCH_DOMAIN GATEWAY_CTID GATEWAY_IP SANDBOX_CTID SANDBOX_IP; do
+for v in ROOTFS_STORAGE GATEWAY GATEWAY_CTID GATEWAY_IP SANDBOX_CTID SANDBOX_IP; do
   [ -n "${!v}" ] || missing+=("$v")
 done
 if [ ${#missing[@]} -gt 0 ]; then
@@ -53,6 +55,9 @@ echo "Using template: $TEMPLATE"
 
 create_ct() {
   local id=$1 ip=$2 name=$3 cores=$4 mem=$5 disk=$6 features=$7
+  local dns_args=()
+  [ -n "$DNS" ] && dns_args+=(--nameserver "$DNS")
+  [ -n "$SEARCH_DOMAIN" ] && dns_args+=(--searchdomain "$SEARCH_DOMAIN")
   if pct status "$id" &>/dev/null; then
     echo "CT $id already exists, skipping"
     return
@@ -64,7 +69,7 @@ create_ct() {
     --cores "$cores" --memory "$mem" --swap 512 \
     --rootfs "$ROOTFS_STORAGE:$disk" \
     --net0 "name=eth0,bridge=$BRIDGE,ip=$ip/$PREFIX_LEN,gw=$GATEWAY" \
-    --nameserver "$DNS" --searchdomain "$SEARCH_DOMAIN" \
+    "${dns_args[@]}" \
     --ssh-public-keys "$SSH_PUBKEY_FILE" \
     --onboot 1 --start 1
   echo "Created CT $id ($name)"

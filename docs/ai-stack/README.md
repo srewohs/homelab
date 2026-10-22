@@ -121,8 +121,8 @@ Postgres ~85 MB.
 
 The containers were created with
 [`scripts/create-ai-containers.sh`](../../scripts/create-ai-containers.sh),
-run on the Proxmox host (`pct create` with the values above, `--onboot 1`, your SSH public key, a
-static IP and the local DNS server). It takes a ZFS snapshot named `fresh`
+run on the Proxmox host (`pct create` with the values above, `--onboot 1`, your SSH public key and a
+static IP; DNS comes from the node's settings unless you set `DNS`). It takes a ZFS snapshot named `fresh`
 right after creation, so there is always a clean undo point before any
 automation touches the container.
 
