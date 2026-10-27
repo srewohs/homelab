@@ -1,0 +1,7 @@
+---
+# Lines to keep in /etc/hosts, one per address. The first name identifies
+# the line: an existing line with that name (added by hand, say) is
+# replaced in place rather than duplicated.
+#   - ip: 192.0.2.11
+#     names: [pbs.home.arpa, pbs]
+etc_hosts_entries: []

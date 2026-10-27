@@ -1,0 +1,23 @@
+---
+- name: Check entries
+  ansible.builtin.assert:
+    that:
+      - etc_hosts_entries | rejectattr('ip', 'defined') | list | length == 0
+      - etc_hosts_entries | rejectattr('names', 'defined') | list | length == 0
+      - etc_hosts_entries | map(attribute='names') | reject('sequence') | list | length == 0
+      - etc_hosts_entries | map(attribute='names') | select('string') | list | length == 0
+    fail_msg: >-
+      Each item in etc_hosts_entries needs ip and names (a list). See
+      roles/etc_hosts/README.md.
+    quiet: true
+
+# Matched on the first name, anywhere after the address, so a hand-added
+# line for the same host is taken over instead of duplicated.
+- name: Hosts entries
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^\S+\s+(.*\s)?{{ item.names[0] | regex_escape }}(\s|$)'
+    line: "{{ item.ip }} {{ item.names | join(' ') }}"
+  loop: "{{ etc_hosts_entries }}"
+  loop_control:
+    label: "{{ item.names[0] }}"

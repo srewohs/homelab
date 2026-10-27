@@ -57,3 +57,8 @@ pbs_host_backup_include_dev:
   - /etc/pve
 pbs_host_backup_keyfile: /etc/pve/priv/storage/pbs.enc
 pbs_host_backup_failure_webhook: "{{ vault_pbs_host_backup_webhook }}"
+
+# --- etc_hosts (pve_nodes) --------------------------------------------------
+etc_hosts_entries:
+  - ip: 192.0.2.11
+    names: [pbs.home.arpa, pbs]

@@ -1,4 +1,6 @@
 - name: Deploy the host backup to Proxmox Backup Server
   hosts: pve_nodes
   roles:
+    # Pins the PBS server's name first, so the backups don't depend on DNS.
+    - etc_hosts
     - pbs_host_backup

@@ -33,6 +33,7 @@ example).
 | [`ai_stack`](roles/ai_stack/README.md) | Open WebUI and LiteLLM under Docker Compose |
 | [`pi_sandbox`](roles/pi_sandbox/README.md) | A container for the Pi coding agent, reaching models only through LiteLLM |
 | [`pbs_host_backup`](roles/pbs_host_backup/README.md) | Host directories (data pools, `/etc`) to Proxmox Backup Server on a timer. Runs on the Proxmox node |
+| [`etc_hosts`](roles/etc_hosts/README.md) | Names pinned in `/etc/hosts`, for hosts that must resolve without DNS. Used on the Proxmox node for the backup server |
 
 ## Code here, data elsewhere
 
