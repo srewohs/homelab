@@ -6,7 +6,8 @@ self-hosted AI stack (Open WebUI, a LiteLLM gateway, and a sandboxed coding
 agent).
 
 For this setup, Ansible configures containers that already exist, plus
-one role (`pbs_host_backup`) that runs on the Proxmox node itself. It does
+two roles (`pbs_host_backup`, `etc_hosts`) that run on the Proxmox node
+itself. It does
 not create containers; that happens on the Proxmox host (see
 [`scripts/create-ai-containers.sh`](scripts/create-ai-containers.sh) for one
 example).

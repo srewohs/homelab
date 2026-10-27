@@ -31,8 +31,8 @@ pbs_host_backup_include_dev: []
 # encrypted PBS storage, in /etc/pve/priv/storage/<storage-id>.enc.
 pbs_host_backup_keyfile: ""
 
-# metadata (fast: unchanged files are found by their metadata) or data
-# (reads everything).
+# metadata (fast: unchanged files are found by their metadata), data
+# (reads everything) or legacy (the format before change detection).
 pbs_host_backup_change_detection_mode: metadata
 
 # systemd OnCalendar expression.

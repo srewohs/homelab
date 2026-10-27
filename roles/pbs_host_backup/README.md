@@ -41,18 +41,33 @@ on the PBS side (a prune job on the datastore or namespace).
 | `pbs_host_backup_schedule` | `*-*-* 02:30:00` | systemd `OnCalendar` |
 | `pbs_host_backup_failure_webhook` | `""` | Discord-compatible webhook URL for failures. From the vault |
 
-The role asserts the three required variables and the archive names.
+The role asserts the three required variables, the archive names and the
+change detection mode.
 
 ### Proxmox VE notes
 
 - `/etc/pve` is a FUSE mount. Back up `/etc` with
   `pbs_host_backup_include_dev: [/etc/pve]`, or the archive holds an empty
-  `pve` directory. Check with a file-level restore after the first run.
+  `pve` directory. Check with a test restore after the first run (below).
 - If the node's guest backups are encrypted, its key is in
   `/etc/pve/priv/storage/<storage-id>.enc`, and pointing
   `pbs_host_backup_keyfile` at it keeps one key for everything. Keep a copy
   of that key off the node: without it, nothing can be restored.
 - Schedule the job after the node's `vzdump` job.
+
+## Testing a restore
+
+Restore one archive to a scratch directory and compare it with the live
+files. Giving the group (`host/<hostname>`) uses the latest snapshot.
+
+```bash
+set -a; . /etc/pbs-host-backup/env; set +a
+proxmox-backup-client restore --ns pve-host --keyfile /etc/pve/priv/storage/pbs.enc \
+  "host/$(hostname)" etc.pxar /var/tmp/restore-test/etc
+diff -rq --no-dereference /etc /var/tmp/restore-test/etc
+```
+
+The copy holds the host's secrets, so delete it when done.
 
 ## Vault variables
 
