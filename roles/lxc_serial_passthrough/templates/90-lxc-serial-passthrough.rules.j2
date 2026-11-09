@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+#
+# ID_SERIAL_SHORT comes from the stock 60-serial.rules, so these run after
+# it. On remove, udev still has the device's properties from its database.
+{% for d in lxc_serial_passthrough_devices %}
+
+# {{ d.name }} -> CT {{ d.vmid }} at {{ d.container_path }}
+ACTION=="add", SUBSYSTEM=="tty", ENV{ID_SERIAL_SHORT}=="{{ d.serial }}", RUN+="/usr/local/sbin/lxc-serial-passthrough add {{ lxc_serial_passthrough_base_dir }}/{{ d.name }} {{ d.container_path | basename }} $major $minor {{ d.mode | default('0666') }}"
+ACTION=="remove", SUBSYSTEM=="tty", ENV{ID_SERIAL_SHORT}=="{{ d.serial }}", RUN+="/usr/local/sbin/lxc-serial-passthrough remove {{ lxc_serial_passthrough_base_dir }}/{{ d.name }} {{ d.container_path | basename }}"
+{% endfor %}

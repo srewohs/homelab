@@ -1,0 +1,123 @@
+---
+# ---------------------------------------------------------------------------
+# SCOPE
+#
+# Runs on the Proxmox node. Owns the udev rule, its helper script, the
+# tmpfiles entry, and this role's lines in each container's config.
+#
+# It never restarts a container. A changed container config only takes
+# effect at the next start, and the role says which containers need one.
+# ---------------------------------------------------------------------------
+
+- name: Check the device list
+  ansible.builtin.assert:
+    that:
+      - item.name is defined and item.name is match('^[A-Za-z0-9_-]+$')
+      - item.vmid is defined and (item.vmid | string) is match('^[0-9]+$')
+      - item.serial is defined and item.serial | length > 0
+      - item.container_path is defined and item.container_path is match('^/dev/[^ ]+[^/]$')
+    fail_msg: >-
+      Each entry needs name (letters, digits, - or _), a numeric vmid, the
+      udev serial, and an absolute container_path under /dev.
+    quiet: true
+  loop: "{{ lxc_serial_passthrough_devices }}"
+  loop_control:
+    label: "{{ item.name | default('?') }}"
+
+- name: Check the container configs exist
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ item.vmid }}.conf"
+  register: lxc_serial_passthrough_conf_stat
+  loop: "{{ lxc_serial_passthrough_devices }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: not lxc_serial_passthrough_conf_stat.stat.exists
+
+- name: Install the udev helper
+  ansible.builtin.template:
+    src: lxc-serial-passthrough.sh.j2
+    dest: /usr/local/sbin/lxc-serial-passthrough
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the device directories at boot
+  ansible.builtin.template:
+    src: lxc-serial-passthrough.conf.j2
+    dest: /etc/tmpfiles.d/lxc-serial-passthrough.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: lxc_serial_passthrough_tmpfiles
+
+- name: Create the device directories now
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/lxc-serial-passthrough.conf
+  when: lxc_serial_passthrough_tmpfiles is changed
+  changed_when: true
+
+- name: Install the udev rule
+  ansible.builtin.template:
+    src: 90-lxc-serial-passthrough.rules.j2
+    dest: /etc/udev/rules.d/90-lxc-serial-passthrough.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload udev rules
+    - Replay udev add events
+
+# Older binds of the same device go before the new lines are added, so a
+# config never holds both (see remove_mount_entries in defaults).
+- name: Drop older mount entries for the devices
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ item.0.vmid }}.conf"
+    regexp: "^lxc\\.mount\\.entry: {{ item.1 | regex_escape }} "
+    state: absent
+    unsafe_writes: true   # /etc/pve is pmxcfs
+  loop: "{{ lxc_serial_passthrough_devices | subelements('remove_mount_entries', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }}: {{ item.1 }}"
+  register: lxc_serial_passthrough_removed
+
+# Lines go before any [snapshot] section, which is where Proxmox keeps the
+# live config.
+- name: Allow the device's major number
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ item.vmid }}.conf"
+    line: "lxc.cgroup2.devices.allow: c {{ item.major | default(188) }}:* rwm"
+    insertbefore: '^\['
+    firstmatch: true
+    unsafe_writes: true
+  loop: "{{ lxc_serial_passthrough_devices }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: lxc_serial_passthrough_cgroup
+
+- name: Bind-mount the device directory
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ item.vmid }}.conf"
+    regexp: "^lxc\\.mount\\.entry: {{ (lxc_serial_passthrough_base_dir ~ '/' ~ item.name) | regex_escape }} "
+    line: >-
+      lxc.mount.entry: {{ lxc_serial_passthrough_base_dir }}/{{ item.name }}
+      {{ item.container_path | dirname | regex_replace('^/', '') }}
+      none bind,optional,create=dir
+    insertbefore: '^\['
+    firstmatch: true
+    unsafe_writes: true
+  loop: "{{ lxc_serial_passthrough_devices }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: lxc_serial_passthrough_mount
+
+- name: Say which containers need a restart
+  ansible.builtin.debug:
+    msg: >-
+      CT {{ item }}'s config changed. Restart it (pct reboot {{ item }})
+      for the new device mount to take effect.
+  loop: >-
+    {{ ((lxc_serial_passthrough_removed.results | selectattr('changed')
+         | map(attribute='item.0.vmid') | list)
+        + ((lxc_serial_passthrough_cgroup.results
+            + lxc_serial_passthrough_mount.results) | selectattr('changed')
+           | map(attribute='item.vmid') | list))
+       | unique }}

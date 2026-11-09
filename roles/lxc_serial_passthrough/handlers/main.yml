@@ -1,0 +1,19 @@
+---
+- name: Reload udev rules
+  ansible.builtin.command: udevadm control --reload
+  changed_when: true
+
+# Replays "add" for the passed-through devices only, so their nodes exist
+# now rather than after the next reconnect or reboot.
+- name: Replay udev add events
+  ansible.builtin.command:
+    argv:
+      - udevadm
+      - trigger
+      - --action=add
+      - --subsystem-match=tty
+      - "--property-match=ID_SERIAL_SHORT={{ item.serial }}"
+  loop: "{{ lxc_serial_passthrough_devices }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: true

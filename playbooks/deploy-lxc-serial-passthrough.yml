@@ -1,0 +1,5 @@
+---
+- name: Pass USB serial devices into containers
+  hosts: pve_nodes
+  roles:
+    - lxc_serial_passthrough

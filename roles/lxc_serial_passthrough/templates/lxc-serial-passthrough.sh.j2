@@ -1,0 +1,30 @@
+#!/bin/sh
+# {{ ansible_managed }}
+#
+# Run by udev when a passed-through serial device appears or goes away.
+# Keeps one device node in a directory that is bind-mounted into the
+# container. The directory mount stays valid across reconnects; a bind mount
+# of the node itself would keep pointing at the deleted node.
+#
+#   lxc-serial-passthrough add    <dir> <node> <major> <minor> <mode>
+#   lxc-serial-passthrough remove <dir> <node>
+set -eu
+
+action=$1
+dir=$2
+node=$3
+
+mkdir -p "$dir"
+case "$action" in
+  add)
+    rm -f "$dir/$node"
+    mknod -m "$6" "$dir/$node" c "$4" "$5"
+    ;;
+  remove)
+    rm -f "$dir/$node"
+    ;;
+  *)
+    echo "unknown action: $action" >&2
+    exit 2
+    ;;
+esac

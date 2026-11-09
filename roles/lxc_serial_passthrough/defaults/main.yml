@@ -1,0 +1,28 @@
+---
+# USB serial devices to pass into unprivileged LXC containers, one entry per
+# device. Each needs:
+#   name:            short label, also the host directory under base_dir
+#   vmid:            the container that gets the device
+#   serial:          udev ID_SERIAL_SHORT (`udevadm info /dev/ttyUSB0`)
+#   container_path:  absolute path of the device node inside the container
+# Optional:
+#   major:           character device major to allow (default 188, ttyUSB;
+#                    166 for ttyACM)
+#   mode:            node mode (default "0666"; the container sees the node
+#                    as nobody:nogroup, so anything tighter needs an owner
+#                    in the container's mapped range)
+#   remove_mount_entries: host source paths of older lxc.mount.entry lines
+#                    to drop from the container's config (a hand-made file
+#                    bind of the same device, say). They must go in the same
+#                    change: a file bind inside the new directory bind would
+#                    create a stray file in the host directory.
+#
+#   - name: zigbee
+#     vmid: 200
+#     serial: 0123456789abcdef0123456789abcdef
+#     container_path: /dev/serial/by-id/usb-Example_Dongle-if00-port0
+lxc_serial_passthrough_devices: []
+
+# Host directory holding one subdirectory per device. Must be on a file
+# system without nodev: /dev (devtmpfs) works, /run (tmpfs, nodev) does not.
+lxc_serial_passthrough_base_dir: /dev/lxc-serial

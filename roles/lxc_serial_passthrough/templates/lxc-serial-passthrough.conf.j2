@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+#
+# Creates the per-device directories early at boot (systemd-tmpfiles-setup-dev
+# handles /dev), so the containers' bind mounts find them even before udev
+# has added the device.
+{% for d in lxc_serial_passthrough_devices %}
+d {{ lxc_serial_passthrough_base_dir }}/{{ d.name }} 0755 root root -
+{% endfor %}
