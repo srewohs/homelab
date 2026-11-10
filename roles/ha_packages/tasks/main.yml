@@ -102,10 +102,12 @@
   block:
     # base64 keeps the content intact through qm's argument passing. Fine
     # for package-sized files (the guest agent caps a command around 64 KiB).
+    # rstrip=False: the file lookup drops the trailing newline by default,
+    # so every file differed from the repo copy on the next run.
     - name: Write the new versions
       ansible.builtin.command:
         argv: [qm, guest, exec, "{{ ha_packages_vmid }}", --, sh, -c,
-               "echo {{ lookup('ansible.builtin.file', ha_packages_src ~ '/' ~ item) | b64encode }} | base64 -d > {{ ha_packages_dest }}/{{ item }}"]
+               "echo {{ lookup('ansible.builtin.file', ha_packages_src ~ '/' ~ item, rstrip=False) | b64encode }} | base64 -d > {{ ha_packages_dest }}/{{ item }}"]
       loop: "{{ ha_packages_changed }}"
       register: ha_packages_write
       changed_when: true
