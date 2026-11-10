@@ -1,0 +1,10 @@
+---
+# Install pinned Home Assistant custom integrations (instead of HACS).
+#   ansible-playbook playbooks/deploy-ha-custom-components.yml --check
+#   ansible-playbook playbooks/deploy-ha-custom-components.yml
+# Upgrading: bump version, url and sha256 in group_vars, run it again.
+- name: Deploy Home Assistant custom integrations
+  hosts: pve_nodes
+  gather_facts: false
+  roles:
+    - ha_custom_components

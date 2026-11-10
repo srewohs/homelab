@@ -1,0 +1,20 @@
+---
+# Custom integrations to install, each pinned to a release zip and its sha256
+# (GitHub shows the digest on the release page and in the API):
+#   - name: example_integration          # directory under custom_components
+#     version: v1.2.3
+#     url: https://github.com/owner/repo/releases/download/v1.2.3/example.zip
+#     sha256: 0123...                     # without the "sha256:" prefix
+#     repo: owner/repo                    # optional: report newer releases
+ha_custom_components: []
+
+# The Home Assistant OS VM on this Proxmox node, and the HA container's name.
+ha_custom_components_vmid: ""
+ha_custom_components_container: homeassistant
+
+# HA API, from the control node, to wait for HA after a restart.
+ha_custom_components_url: ""
+ha_custom_components_token: ""
+
+# Report releases newer than the pinned ones (GitHub API, read-only).
+ha_custom_components_check_upstream: true

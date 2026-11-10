@@ -1,0 +1,120 @@
+---
+# ---------------------------------------------------------------------------
+# SCOPE
+#
+# Runs on the Proxmox node hosting the Home Assistant OS VM. Installs custom
+# integrations (custom_components) pinned to a release and checksum, as code
+# instead of HACS. The download, checksum and unpack run inside the HA
+# container (python, no extra tools), reached through the guest agent.
+#
+# Restarts Home Assistant only if something was installed, then waits for
+# the API. Owns only the listed directories. Does not configure the
+# integrations: config entries set up in the UI stay in HA's own storage.
+# ---------------------------------------------------------------------------
+
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - (ha_custom_components_vmid | string) is match('^[0-9]+$')
+      - ha_custom_components_url | length > 0
+      - ha_custom_components_token | length > 0
+      - ha_custom_components | rejectattr('name', 'match', '^[a-z0-9_]+$') | list | length == 0
+      - ha_custom_components | rejectattr('sha256', 'match', '^[0-9a-f]{64}$') | list | length == 0
+      - ha_custom_components | selectattr('url', 'match', '^https://') | list | length == ha_custom_components | length
+    fail_msg: >-
+      Set ha_custom_components_vmid, _url and _token; each component needs a
+      name (a-z, 0-9, _), an https url, a version and a 64-hex sha256.
+      See roles/ha_custom_components/README.md.
+    quiet: true
+  no_log: true
+
+- name: Install (or, in check mode, compare) each component
+  ansible.builtin.command:
+    argv:
+      - qm
+      - guest
+      - exec
+      - "{{ ha_custom_components_vmid }}"
+      - --timeout
+      - "120"
+      - --
+      - docker
+      - exec
+      - "{{ ha_custom_components_container }}"
+      - python3
+      - -c
+      - "{{ lookup('ansible.builtin.file', 'install_component.py') }}"
+      - "{{ item.name }}"
+      - "{{ item.version }}"
+      - "{{ item.url }}"
+      - "{{ item.sha256 }}"
+      - "{{ 'check' if ansible_check_mode else 'apply' }}"
+  loop: "{{ ha_custom_components }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.version }}"
+  register: ha_cc_result
+  check_mode: false
+  changed_when: "'installed ' in ((ha_cc_result.stdout | from_json)['out-data'] | default(''))"
+  failed_when: >-
+    (ha_cc_result.stdout | from_json).exitcode | default(1) != 0
+    or 'error' in ((ha_cc_result.stdout | from_json)['out-data'] | default(''))
+
+- name: Results
+  ansible.builtin.debug:
+    msg: "{{ ha_cc_result.results | map(attribute='stdout') | map('from_json') | map(attribute='out-data') | map('trim') | list }}"
+
+- name: Restart Home Assistant for new code
+  when: ha_cc_result.results | selectattr('changed') | list | length > 0
+  block:
+    - name: Restart HA core
+      ansible.builtin.command:
+        argv: [qm, guest, exec, "{{ ha_custom_components_vmid }}", --timeout, "180", --,
+               docker, exec, hassio_cli, ha, core, restart]
+      changed_when: true
+
+    - name: Wait for the HA API
+      ansible.builtin.uri:
+        url: "{{ ha_custom_components_url }}/api/"
+        headers:
+          Authorization: "Bearer {{ ha_custom_components_token }}"
+      register: ha_cc_api
+      until: ha_cc_api.status == 200
+      retries: 30
+      delay: 10
+      delegate_to: localhost
+      no_log: true
+
+    - name: Remove the previous versions
+      ansible.builtin.command:
+        argv: [qm, guest, exec, "{{ ha_custom_components_vmid }}", --,
+               docker, exec, "{{ ha_custom_components_container }}",
+               rm, -rf, "/config/custom_components/.{{ item.item.name }}.previous"]
+      loop: "{{ ha_cc_result.results | selectattr('changed') | list }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+- name: Look up the latest upstream releases
+  when: ha_custom_components_check_upstream | bool
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ item.repo }}/releases/latest"
+    return_content: true
+  loop: "{{ ha_custom_components | selectattr('repo', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: ha_cc_upstream
+  delegate_to: localhost
+  check_mode: false
+  failed_when: false
+
+- name: Report newer releases
+  when: ha_custom_components_check_upstream | bool
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.name }}: pinned {{ item.item.version }}, latest stable
+      {{ item.json.tag_name | default('unknown') }}
+      {{ '(up to date)' if item.json.tag_name | default('') == item.item.version
+         else '(newer available: check its release notes and age, then bump version and sha256)' }}
+  loop: "{{ ha_cc_upstream.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
