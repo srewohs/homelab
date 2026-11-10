@@ -1,0 +1,202 @@
+---
+# ---------------------------------------------------------------------------
+# SCOPE
+#
+# Runs on the Proxmox node that hosts the Home Assistant OS VM. Pushes package
+# files into the VM with the QEMU guest agent (HAOS has no file-write API),
+# then uses the HA API from the control node to check the config and reload.
+#
+# Owns only the files in ha_packages_src. Other files in the packages
+# directory are reported, never touched. Never restarts Home Assistant.
+#
+# Safety: changed files are backed up inside the VM first; if HA's config
+# check fails, the backups are restored (new files removed) and the play
+# stops, so a bad edit can't break the next restart.
+# ---------------------------------------------------------------------------
+
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - ha_packages_src | length > 0
+      - (ha_packages_vmid | string) is match('^[0-9]+$')
+      - ha_packages_url | length > 0
+      - ha_packages_token | length > 0
+    fail_msg: >-
+      Set ha_packages_src, ha_packages_vmid, ha_packages_url and
+      ha_packages_token. See roles/ha_packages/README.md.
+    quiet: true
+  no_log: true
+
+- name: Find the package files
+  ansible.builtin.find:
+    paths: "{{ ha_packages_src }}"
+    patterns: "*.yaml"
+    get_checksum: true
+  delegate_to: localhost
+  register: ha_packages_local
+
+- name: Fail if there are none
+  ansible.builtin.assert:
+    that: ha_packages_local.files | length > 0
+    fail_msg: "No *.yaml files in {{ ha_packages_src }}."
+    quiet: true
+
+- name: Make sure the packages directory exists in the VM
+  ansible.builtin.command:
+    argv: [qm, guest, exec, "{{ ha_packages_vmid }}", --, mkdir, -p, "{{ ha_packages_dest }}"]
+  changed_when: false
+
+# sha1 on both sides: find's checksum is sha1, and busybox has sha1sum.
+- name: Read checksums in the VM
+  ansible.builtin.command:
+    argv: [qm, guest, exec, "{{ ha_packages_vmid }}", --, sh, -c,
+           "cd {{ ha_packages_dest }} && sha1sum *.yaml 2>/dev/null; true"]
+  register: ha_packages_remote_raw
+  changed_when: false
+  check_mode: false
+
+- name: Parse the VM's checksums
+  ansible.builtin.set_fact:
+    ha_packages_remote: >-
+      {%- set d = {} -%}
+      {%- for line in ((ha_packages_remote_raw.stdout | from_json)['out-data'] | default('')).splitlines() if line | trim -%}
+      {%-   set p = line.split() -%}
+      {%-   set _ = d.update({p[1]: p[0]}) -%}
+      {%- endfor -%}
+      {{ d }}
+
+- name: Work out which files differ
+  ansible.builtin.set_fact:
+    ha_packages_changed: >-
+      {%- set out = [] -%}
+      {%- for f in ha_packages_local.files -%}
+      {%-   if ha_packages_remote.get(f.path | basename) != f.checksum -%}
+      {%-     set _ = out.append(f.path | basename) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ out }}
+    ha_packages_extra: >-
+      {{ ha_packages_remote.keys()
+         | reject('in', ha_packages_local.files | map(attribute='path') | map('basename') | list)
+         | list }}
+
+- name: Report
+  ansible.builtin.debug:
+    msg:
+      changed: "{{ ha_packages_changed }}"
+      unchanged: "{{ ha_packages_local.files | map(attribute='path') | map('basename') | reject('in', ha_packages_changed) | list }}"
+      in_vm_not_in_repo: "{{ ha_packages_extra }}"
+
+- name: Back up the current versions in the VM
+  ansible.builtin.command:
+    argv: [qm, guest, exec, "{{ ha_packages_vmid }}", --, sh, -c,
+           "f={{ ha_packages_dest }}/{{ item }}; if [ -f $f ]; then cp -p $f $f.ha_packages_bak; fi"]
+  loop: "{{ ha_packages_changed }}"
+  changed_when: false
+
+# Everything after the backup is in one block: if any step fails (the write,
+# the config check, or a reload, which validates more than the check does),
+# the rescue puts the old files back and reloads them before stopping.
+- name: Push, check and reload
+  when: ha_packages_changed | length > 0
+  block:
+    # base64 keeps the content intact through qm's argument passing. Fine
+    # for package-sized files (the guest agent caps a command around 64 KiB).
+    - name: Write the new versions
+      ansible.builtin.command:
+        argv: [qm, guest, exec, "{{ ha_packages_vmid }}", --, sh, -c,
+               "echo {{ lookup('ansible.builtin.file', ha_packages_src ~ '/' ~ item) | b64encode }} | base64 -d > {{ ha_packages_dest }}/{{ item }}"]
+      loop: "{{ ha_packages_changed }}"
+      register: ha_packages_write
+      changed_when: true
+      failed_when: (ha_packages_write.stdout | from_json).exitcode | default(1) != 0
+
+    - name: Check the config with Home Assistant
+      ansible.builtin.uri:
+        url: "{{ ha_packages_url }}/api/config/core/check_config"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ha_packages_token }}"
+        return_content: true
+      delegate_to: localhost
+      register: ha_packages_check
+      no_log: true
+
+    - name: Config check result
+      ansible.builtin.assert:
+        that: ha_packages_check.json.result == 'valid'
+        fail_msg: "Config check failed: {{ ha_packages_check.json.errors }}"
+        success_msg: valid
+
+    # Shallow check above; the reload is where HA validates each domain.
+    - name: Reload
+      ansible.builtin.uri:
+        url: "{{ ha_packages_url }}/api/services/{{ item }}/reload"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ha_packages_token }}"
+        status_code: 200
+        return_content: true
+      loop: "{{ ha_packages_reload }}"
+      delegate_to: localhost
+      register: ha_packages_reloaded
+      no_log: true
+
+    - name: Remove the backups
+      ansible.builtin.command:
+        argv: [qm, guest, exec, "{{ ha_packages_vmid }}", --, rm, -f,
+               "{{ ha_packages_dest }}/{{ item }}.ha_packages_bak"]
+      loop: "{{ ha_packages_changed }}"
+      changed_when: false
+
+  rescue:
+    - name: Restore backups (or remove files that were new)
+      ansible.builtin.command:
+        argv: [qm, guest, exec, "{{ ha_packages_vmid }}", --, sh, -c,
+               "f={{ ha_packages_dest }}/{{ item }}; if [ -f $f.ha_packages_bak ]; then mv $f.ha_packages_bak $f; else rm -f $f; fi"]
+      loop: "{{ ha_packages_changed }}"
+      changed_when: true
+
+    - name: Reload the restored config
+      ansible.builtin.uri:
+        url: "{{ ha_packages_url }}/api/services/{{ item }}/reload"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ha_packages_token }}"
+        status_code: [200, 400, 500]
+      loop: "{{ ha_packages_reload }}"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Stop
+      ansible.builtin.fail:
+        msg: >-
+          Deploy failed at '{{ ansible_failed_task.name }}'; previous files
+          restored and reloaded. Reload results (no body for 200):
+          {{ (ha_packages_reloaded.results | default([]))
+             | map(attribute='status', default='-') | list }}.
+          Check Home Assistant's log (Settings > System > Logs) for the
+          validation error.
+
+- name: Smoke tests
+  when: ha_packages_smoke | bool
+  ansible.builtin.include_tasks: smoke.yml
+  loop: "{{ ha_packages_smoke_tests }}"
+  loop_control:
+    loop_var: test
+    label: "{{ test.name }}"
+
+- name: Post actions
+  ansible.builtin.uri:
+    url: "{{ ha_packages_url }}/api/services/{{ item.service }}"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ ha_packages_token }}"
+    body_format: json
+    body: "{{ item.data | default({}) }}"
+  loop: "{{ ha_packages_post_actions }}"
+  loop_control:
+    label: "{{ item.service }}"
+  delegate_to: localhost
+  no_log: true
+  when: ha_packages_changed | length > 0 or ha_packages_smoke | bool

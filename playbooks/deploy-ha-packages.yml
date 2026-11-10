@@ -1,0 +1,10 @@
+---
+# Push Home Assistant package files, check the config, reload.
+#   ansible-playbook playbooks/deploy-ha-packages.yml --check   # what would change
+#   ansible-playbook playbooks/deploy-ha-packages.yml
+#   ansible-playbook playbooks/deploy-ha-packages.yml -e ha_packages_smoke=true
+- name: Deploy Home Assistant packages
+  hosts: pve_nodes
+  gather_facts: false
+  roles:
+    - ha_packages

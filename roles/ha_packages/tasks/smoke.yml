@@ -1,0 +1,38 @@
+---
+- name: "{{ test.name }}: call {{ test.service }}"
+  ansible.builtin.uri:
+    url: "{{ ha_packages_url }}/api/services/{{ test.service }}"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ ha_packages_token }}"
+    body_format: json
+    body: "{{ test.data | default({}) }}"
+  delegate_to: localhost
+  no_log: true
+
+- name: "{{ test.name }}: wait"
+  ansible.builtin.pause:
+    seconds: "{{ test.wait | default(3) }}"
+
+- name: "{{ test.name }}: read states"
+  ansible.builtin.uri:
+    url: "{{ ha_packages_url }}/api/states/{{ item }}"
+    headers:
+      Authorization: "Bearer {{ ha_packages_token }}"
+    return_content: true
+  loop: "{{ test.expect.keys() | list }}"
+  delegate_to: localhost
+  register: ha_packages_smoke_states
+  no_log: true
+
+- name: "{{ test.name }}: result"
+  ansible.builtin.assert:
+    that: item.json.state == test.expect[item.json.entity_id]
+    fail_msg: "{{ item.json.entity_id }} is {{ item.json.state }}, expected {{ test.expect[item.json.entity_id] }}"
+    success_msg: >-
+      {{ item.json.entity_id }} {{ item.json.state }}
+      brightness={{ item.json.attributes.brightness | default('-') }}
+      rgb={{ item.json.attributes.rgb_color | default('-') }}
+  loop: "{{ ha_packages_smoke_states.results }}"
+  loop_control:
+    label: "{{ item.json.entity_id }}"

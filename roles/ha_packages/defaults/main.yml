@@ -1,0 +1,37 @@
+---
+# Directory of Home Assistant package files (*.yaml) on the control node.
+# The repo copy is the source of truth; files are pushed to the VM as-is.
+ha_packages_src: ""
+
+# The Home Assistant OS VM on this Proxmox node, and where its /config lives
+# from the HAOS host's point of view (what `qm guest exec` sees).
+ha_packages_vmid: ""
+ha_packages_dest: /mnt/data/supervisor/homeassistant/packages
+
+# Home Assistant API, called from the control node. The token belongs to an
+# admin HA user (check_config and reloads need admin).
+ha_packages_url: ""
+ha_packages_token: ""
+
+# Domains reloaded after a valid config check. Packages can only add these
+# without a restart; a new top-level integration needs `ha core restart`.
+ha_packages_reload:
+  - input_boolean
+  - template
+  - scene
+  - script
+  - automation
+
+# Actions called after the reload, each {service: "domain/name", data: {}}.
+# For example, re-run an automation so lights match the new config.
+ha_packages_post_actions: []
+
+# Opt-in smoke tests (-e ha_packages_smoke=true): each calls a service, waits,
+# and checks entity states, printing brightness/colour for a visual check.
+#   - name: night look
+#     service: script/render_passive_alert
+#     data: { alert: night }
+#     expect: { light.example: "on" }
+# ha_packages_post_actions run again afterwards to restore the live state.
+ha_packages_smoke: false
+ha_packages_smoke_tests: []
