@@ -1,0 +1,7 @@
+---
+- name: Build the MQTT broker container
+  hosts: mqtt
+  become: false        # already root in LXC
+  roles:
+    - baseline
+    - mosquitto

@@ -1,0 +1,116 @@
+---
+# ---------------------------------------------------------------------------
+# SCOPE
+#
+# Owns the Debian mosquitto package, the drop-in /etc/mosquitto/conf.d/
+# local.conf, the users it is given in /etc/mosquitto/passwd, and the
+# service. Leaves the stock /etc/mosquitto/mosquitto.conf alone.
+#
+# Retained messages and sessions (/var/lib/mosquitto) are state; the
+# container backup covers them.
+# ---------------------------------------------------------------------------
+
+- name: Check the user list
+  ansible.builtin.assert:
+    that:
+      - item.name is defined and item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.password is defined and item.password | length >= 16
+    fail_msg: >-
+      Each user needs a name (letters, digits, . _ -) and a password of at
+      least 16 characters. Avoid $ and ! in passwords: they get pasted into
+      shells and YAML.
+    quiet: true
+  loop: "{{ mosquitto_users }}"
+  loop_control:
+    label: "{{ item.name | default('?') }}"
+  no_log: true
+
+- name: Install mosquitto
+  ansible.builtin.apt:
+    name: "{{ ['mosquitto'] + (['mosquitto-clients'] if mosquitto_install_clients else []) }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Write the local config
+  ansible.builtin.template:
+    src: local.conf.j2
+    dest: /etc/mosquitto/conf.d/local.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart mosquitto
+
+# root:mosquitto 0640 is the one combination that works: the daemon opens
+# the file after dropping to the mosquitto user, so root:root 0600 stops it
+# starting, and mosquitto_passwd warns about mosquitto:mosquitto.
+- name: Create the password file
+  ansible.builtin.file:
+    path: /etc/mosquitto/passwd
+    state: touch
+    owner: root
+    group: mosquitto
+    mode: "0640"
+    modification_time: preserve
+    access_time: preserve
+
+# Salted hashes differ on every write, so compare rather than rewrite. The
+# helper is passed inline (nothing installed on the host) and only reads,
+# so it also runs in check mode. The password goes in on stdin.
+- name: Check each user's password
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "{{ lookup('ansible.builtin.file', 'mosquitto-check-password.py') }}"
+      - /etc/mosquitto/passwd
+      - "{{ item.name }}"
+    stdin: "{{ item.password }}"
+  register: mosquitto_password_check
+  loop: "{{ mosquitto_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+# Names only, so check mode shows who would change (the step below is
+# skipped in check mode and its output is hidden either way).
+- name: List users whose password will be set
+  ansible.builtin.debug:
+    msg: >-
+      {{ mosquitto_password_check.results | rejectattr('rc', 'equalto', 0)
+         | map(attribute='item.name') | list }}
+
+# -b puts the password in argv for the moment mosquitto_passwd runs. This is
+# a single-purpose container with only root logged in, so that's accepted.
+- name: Set passwords that differ
+  ansible.builtin.command:
+    argv:
+      - mosquitto_passwd
+      - -b
+      - /etc/mosquitto/passwd
+      - "{{ item.item.name }}"
+      - "{{ item.item.password }}"
+  loop: "{{ mosquitto_password_check.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.rc != 0
+  changed_when: true
+  no_log: true
+  notify: Restart mosquitto
+
+# mosquitto_passwd rewrites the file, which can reset the owner.
+- name: Keep the password file's owner and mode
+  ansible.builtin.file:
+    path: /etc/mosquitto/passwd
+    owner: root
+    group: mosquitto
+    mode: "0640"
+
+- name: Enable and start mosquitto
+  ansible.builtin.systemd_service:
+    name: mosquitto
+    enabled: true
+    state: started

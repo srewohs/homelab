@@ -1,0 +1,14 @@
+---
+# Listener address and port. 0.0.0.0 because mosquitto 2.x listens on
+# localhost only without an explicit listener.
+mosquitto_listen_address: 0.0.0.0
+mosquitto_port: 1883
+
+# Broker users, one per client so each can be rotated on its own. Passwords
+# come from the vault. Users in the file but not in this list are left alone.
+#   - name: z2m
+#     password: "{{ vault_mosquitto_z2m_password }}"
+mosquitto_users: []
+
+# Also install mosquitto_pub/mosquitto_sub, handy for testing on the box.
+mosquitto_install_clients: true

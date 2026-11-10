@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+#
+# Only what the stock /etc/mosquitto/mosquitto.conf doesn't set. Repeating
+# one of its settings here (persistence_location, log_dest, ...) is a fatal
+# "Duplicate ... value" error, not last-wins.
+listener {{ mosquitto_port }} {{ mosquitto_listen_address }}
+allow_anonymous false
+password_file /etc/mosquitto/passwd

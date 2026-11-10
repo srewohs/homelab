@@ -1,0 +1,8 @@
+---
+# Restart, not reload: after dropping privileges the daemon may not be able
+# to re-read the root:mosquitto 0640 password file on SIGHUP. Clients
+# reconnect on their own within seconds.
+- name: Restart mosquitto
+  ansible.builtin.systemd_service:
+    name: mosquitto
+    state: restarted
